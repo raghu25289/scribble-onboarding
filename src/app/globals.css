@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #0a0a0f;
+  --ink-soft: #14141c;
+  --panel: #17171f;
+  --panel-line: #26262f;
+  --paper: #f4f1ea;
+  --muted: #9a97a3;
+  --accent: #c6f24e; /* electric lime — the Scribble mark color */
+  --win: #6ee7a8;
+  --miss: #ff6b6b;
+}
+
+html,
+body {
+  background: var(--ink);
+  color: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+.font-display {
+  font-family: "Fraunces", Georgia, "Times New Roman", serif;
+  letter-spacing: -0.02em;
+}
+
+/* subtle grain / vignette for depth */
+.bg-stage {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(198, 242, 78, 0.06), transparent 60%),
+    var(--ink);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.dot-pulse { animation: pulse-dot 1.1s ease-in-out infinite; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #1b1b23 25%, #24242e 37%, #1b1b23 63%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
