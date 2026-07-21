@@ -1,12 +1,12 @@
 "use client";
 
-import type { BrandUnderstanding, VisibilityResult } from "@/lib/types";
+import type { BrandUnderstanding, QueryWithDemand, VisibilityResult } from "@/lib/types";
 import VisibilityRow from "./VisibilityRow";
 
 interface Props {
   domain: string;
   brand: BrandUnderstanding | null;
-  queries: string[];
+  queries: QueryWithDemand[];
   visibility: (VisibilityResult | null)[]; // sparse: null = not yet resolved
 }
 
@@ -57,7 +57,7 @@ export default function ResultsScreen({ domain, brand, queries, visibility }: Pr
 
       <div className="mt-5 space-y-3">
         {queries.map((q, i) => (
-          <VisibilityRow key={i} index={i} query={q} result={visibility[i] ?? null} />
+          <VisibilityRow key={i} index={i} query={q.text} result={visibility[i] ?? null} />
         ))}
       </div>
     </section>

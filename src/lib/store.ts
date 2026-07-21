@@ -18,7 +18,7 @@ import path from "path";
 import os from "os";
 import { Redis } from "@upstash/redis";
 import { config } from "./config";
-import type { Lead, OnboardingRecord } from "./types";
+import type { AuditRequest, Lead, OnboardingRecord } from "./types";
 
 export interface LeadStore {
   createLead(input: Omit<Lead, "id" | "createdAt">): Promise<Lead>;
@@ -26,6 +26,8 @@ export interface LeadStore {
   logOnboarding(record: OnboardingRecord): Promise<void>;
   listLeads(): Promise<Lead[]>;
   listOnboardings(): Promise<OnboardingRecord[]>;
+  logAuditRequest(input: Omit<AuditRequest, "id" | "createdAt">): Promise<AuditRequest>;
+  listAuditRequests(): Promise<AuditRequest[]>;
 }
 
 function id(prefix: string): string {
@@ -40,6 +42,8 @@ const LEAD_KEY = (leadId: string) => `lead:${leadId}`;
 const LEADS_INDEX = "leads:index";
 const ONBOARDING_KEY = (onbId: string) => `onboarding:${onbId}`;
 const ONBOARDINGS_INDEX = "onboardings:index";
+const AUDIT_REQUEST_KEY = (reqId: string) => `auditRequest:${reqId}`;
+const AUDIT_REQUESTS_INDEX = "auditRequests:index";
 
 // ── Redis implementation ─────────────────────────────────────────────────────
 class RedisStore implements LeadStore {
@@ -101,6 +105,39 @@ class RedisStore implements LeadStore {
     }
   }
 
+  async logAuditRequest(
+    input: Omit<AuditRequest, "id" | "createdAt">
+  ): Promise<AuditRequest> {
+    const record: AuditRequest = {
+      id: id("audit"),
+      email: input.email,
+      domain: input.domain,
+      score: input.score,
+      companyName: input.companyName,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await this.redis.set(AUDIT_REQUEST_KEY(record.id), record);
+      await this.redis.rpush(AUDIT_REQUESTS_INDEX, record.id);
+    } catch (e) {
+      console.error("[store:redis] failed to persist audit request:", (e as Error).message);
+    }
+    console.log("[audit-request]", JSON.stringify(record));
+    return record;
+  }
+
+  async listAuditRequests(): Promise<AuditRequest[]> {
+    try {
+      const ids = await this.redis.lrange(AUDIT_REQUESTS_INDEX, 0, -1);
+      if (!ids.length) return [];
+      const reqs = await this.redis.mget<AuditRequest[]>(...ids.map(AUDIT_REQUEST_KEY));
+      return reqs.filter((r): r is AuditRequest => r !== null);
+    } catch (e) {
+      console.error("[store:redis] failed to list audit requests:", (e as Error).message);
+      return [];
+    }
+  }
+
   async listOnboardings(): Promise<OnboardingRecord[]> {
     try {
       const ids = await this.redis.lrange(ONBOARDINGS_INDEX, 0, -1);
@@ -146,6 +183,7 @@ async function appendJson<T>(file: string, item: T): Promise<void> {
 class JsonFileStore implements LeadStore {
   private leadsFile = resolveWritablePath(config.leadStorePath);
   private onboardingsFile = resolveWritablePath(config.onboardingStorePath);
+  private auditRequestsFile = resolveWritablePath(config.auditRequestStorePath);
 
   async createLead(input: Omit<Lead, "id" | "createdAt">): Promise<Lead> {
     const lead: Lead = {
@@ -185,6 +223,30 @@ class JsonFileStore implements LeadStore {
 
   async listOnboardings(): Promise<OnboardingRecord[]> {
     return readJsonArray<OnboardingRecord>(this.onboardingsFile);
+  }
+
+  async logAuditRequest(
+    input: Omit<AuditRequest, "id" | "createdAt">
+  ): Promise<AuditRequest> {
+    const record: AuditRequest = {
+      id: id("audit"),
+      email: input.email,
+      domain: input.domain,
+      score: input.score,
+      companyName: input.companyName,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await appendJson(this.auditRequestsFile, record);
+    } catch (e) {
+      console.error("[store:file] failed to persist audit request:", (e as Error).message);
+    }
+    console.log("[audit-request]", JSON.stringify(record));
+    return record;
+  }
+
+  async listAuditRequests(): Promise<AuditRequest[]> {
+    return readJsonArray<AuditRequest>(this.auditRequestsFile);
   }
 }
 

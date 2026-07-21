@@ -11,6 +11,7 @@ import { generateJson } from "./openrouter";
 import { fetchSiteContent } from "./scrape";
 import { searchWeb, resultsToText } from "./search";
 import { store, makeId } from "./store";
+import { getAhrefsVolume } from "./ahrefs";
 import {
   BRAND_UNDERSTANDING_SYSTEM,
   brandUnderstandingPrompt,
@@ -26,6 +27,7 @@ import type {
   BrandUnderstanding,
   Lead,
   OnboardingRecord,
+  QueryWithDemand,
   VisibilityResult,
   ArpuVerdict,
 } from "./types";
@@ -50,7 +52,19 @@ const queriesSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    queries: { type: "array", items: { type: "string" } },
+    queries: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          text: { type: "string" },
+          demandLow: { type: "integer" },
+          demandHigh: { type: "integer" },
+        },
+        required: ["text", "demandLow", "demandHigh"],
+      },
+    },
   },
   required: ["queries"],
 };
@@ -73,8 +87,18 @@ const arpuSchema = {
     arpuOver150: { type: "boolean" },
     estimate: { type: "string" },
     reasoning: { type: "string" },
+    arpuLowUsd: { type: "number" },
+    arpuHighUsd: { type: "number" },
+    transactionNoun: { type: "string" },
   },
-  required: ["arpuOver150", "estimate", "reasoning"],
+  required: [
+    "arpuOver150",
+    "estimate",
+    "reasoning",
+    "arpuLowUsd",
+    "arpuHighUsd",
+    "transactionNoun",
+  ],
 };
 
 export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
@@ -132,9 +156,9 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
 
   // ── Step 2c: generate 5 high-intent queries ────────────────────────────────
   emit({ type: "status", step: "generate_queries", message: "Generating the 5 questions buyers ask AI about this…" });
-  let queries: string[] = [];
+  let queries: QueryWithDemand[] = [];
   try {
-    const out = await generateJson<{ queries: string[] }>({
+    const out = await generateJson<{ queries: QueryWithDemand[] }>({
       system: QUERY_GENERATION_SYSTEM,
       prompt: queryGenerationPrompt({
         domain: lead.domain,
@@ -145,6 +169,16 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
       schema: queriesSchema,
     });
     queries = (out.queries || []).slice(0, config.queryCount);
+
+    // Prefer real Ahrefs keyword volume over the model's estimate when it's
+    // available; otherwise the model's demandLow/demandHigh stand as-is.
+    for (const q of queries) {
+      const ahrefs = await getAhrefsVolume(q.text);
+      if (ahrefs) {
+        q.demandLow = ahrefs.low;
+        q.demandHigh = ahrefs.high;
+      }
+    }
   } catch (e) {
     emit({
       type: "error",
@@ -166,7 +200,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   emit({ type: "status", step: "check_visibility", message: "Checking whether you show up in each answer…" });
   const visibility: VisibilityResult[] = [];
   for (let i = 0; i < queries.length; i++) {
-    const query = queries[i];
+    const query = queries[i].text;
     let result: VisibilityResult;
     try {
       const search = await searchWeb(query);
@@ -211,7 +245,14 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   // ── Step 4: ARPU classification + branch ───────────────────────────────────
   emit({ type: "status", step: "classify_arpu", message: "Estimating your ARPU to tailor the recommendation…" });
   try {
-    const out = await generateJson<{ arpuOver150: boolean; estimate: string; reasoning: string }>({
+    const out = await generateJson<{
+      arpuOver150: boolean;
+      estimate: string;
+      reasoning: string;
+      arpuLowUsd: number;
+      arpuHighUsd: number;
+      transactionNoun: string;
+    }>({
       system: ARPU_CLASSIFICATION_SYSTEM,
       prompt: arpuClassificationPrompt({
         domain: lead.domain,
@@ -228,6 +269,9 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
       estimate: out.estimate,
       reasoning: out.reasoning,
       branch: out.arpuOver150 ? "lead-gen" : "brand",
+      arpuLowUsd: out.arpuLowUsd,
+      arpuHighUsd: out.arpuHighUsd,
+      transactionNoun: out.transactionNoun,
     };
     record.arpu = verdict;
     emit({ type: "arpu", data: verdict });

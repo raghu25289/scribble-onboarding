@@ -75,7 +75,9 @@ Rules:
 - Vary the angle across the ${config.queryCount} questions (category comparison, problem-first, use-case-specific, alternatives, buying criteria). Do not repeat the same question reworded.
 - Do NOT mention the brand name inside the question — these represent an unbiased buyer who does not yet know the brand.
 
-Return exactly ${config.queryCount} questions.`;
+For each question, also estimate the monthly volume of buyers asking some version of it (across AI assistants and search, not just for this brand) — a plain gauge of how common the underlying need is for this category and audience. Give two integers: demandLow (a conservative monthly estimate) and demandHigh (an aggressive monthly estimate). When you're unsure, favor smaller, more defensible numbers over inflated ones.
+
+Return exactly ${config.queryCount} objects, each with: text (the question), demandLow (integer), demandHigh (integer).`;
 }
 
 // ── 3. VISIBILITY JUDGE ──────────────────────────────────────────────────────
@@ -136,7 +138,10 @@ Then decide whether ARPU is greater than about $${input.thresholdUsd}.
 Return:
 - arpuOver150: true if your estimate exceeds ~$${input.thresholdUsd}, else false.
 - estimate: a short human-readable figure with its unit (e.g. "~$29/mo", "$3k–8k/deal", "~$60 one-time"). Include the unit.
-- reasoning: 2-4 sentences showing how you got there — the signals used and any assumptions made. This is shown to the user, so make it credible and specific.`;
+- reasoning: 2-4 sentences showing how you got there — the signals used and any assumptions made. This is shown to the user, so make it credible and specific.
+- arpuLowUsd: the low end of your estimate, in USD, as a plain number (e.g. 29, not "$29" or "29/mo"). If your estimate is a single figure rather than a range, use that figure.
+- arpuHighUsd: the high end of your estimate, in USD, as a plain number. If your estimate is a single figure rather than a range, use the same number as arpuLowUsd.
+- transactionNoun: the singular unit this revenue recurs per, matching the pricing model (e.g. "month" for subscriptions, "deal" for enterprise/sales-led, "purchase" for one-time, "transaction" for marketplace).`;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

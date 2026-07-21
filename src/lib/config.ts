@@ -29,6 +29,8 @@ export const config = {
   leadStorePath: process.env.LEAD_STORE_PATH || "./data/leads.json",
   onboardingStorePath:
     process.env.ONBOARDING_STORE_PATH || "./data/onboardings.json",
+  auditRequestStorePath:
+    process.env.AUDIT_REQUEST_STORE_PATH || "./data/audit-requests.json",
 };
 
 export function hasSearchKey(): boolean {

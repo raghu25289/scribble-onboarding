@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import CaptureForm from "./CaptureForm";
 import ProgressPanel from "./ProgressPanel";
 import ResultsScreen from "./ResultsScreen";
 import ArpuCard from "./ArpuCard";
+import CostCard from "./CostCard";
 import CtaCard from "./CtaCard";
+import { topCompetitor } from "@/lib/costEstimate";
 import type {
   AnalyzeEvent,
   AnalyzeStep,
   ArpuVerdict,
   BrandUnderstanding,
   Lead,
+  QueryWithDemand,
   VisibilityResult,
 } from "@/lib/types";
 
@@ -25,7 +28,7 @@ export default function OnboardingFlow() {
   const [latestMessage, setLatestMessage] = useState<string | null>(null);
 
   const [brand, setBrand] = useState<BrandUnderstanding | null>(null);
-  const [queries, setQueries] = useState<string[]>([]);
+  const [queries, setQueries] = useState<QueryWithDemand[]>([]);
   const [visibility, setVisibility] = useState<(VisibilityResult | null)[]>([]);
   const [arpu, setArpu] = useState<ArpuVerdict | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -178,6 +181,12 @@ export default function OnboardingFlow() {
   );
   const visibleCount = resolvedVisibility.filter((v) => v.visible).length;
   const showResults = queries.length > 0;
+  const allDone = resolvedVisibility.length === queries.length && queries.length > 0;
+
+  const topInvisibleCompetitor = useMemo(
+    () => topCompetitor(resolvedVisibility.filter((v) => !v.visible)),
+    [resolvedVisibility]
+  );
 
   return (
     <div className="mt-10 space-y-6 pb-10">
@@ -214,8 +223,22 @@ export default function OnboardingFlow() {
 
       {arpu && <ArpuCard arpu={arpu} />}
 
+      {arpu && allDone && (
+        <CostCard
+          brand={domain}
+          arpu={arpu}
+          queries={queries}
+          visibility={resolvedVisibility}
+        />
+      )}
+
       {phase === "done" && arpu && (
-        <CtaCard branch={arpu.branch} visibleCount={visibleCount} total={queries.length} />
+        <CtaCard
+          domain={domain}
+          visibleCount={visibleCount}
+          total={queries.length}
+          topInvisibleCompetitor={topInvisibleCompetitor}
+        />
       )}
     </div>
   );
