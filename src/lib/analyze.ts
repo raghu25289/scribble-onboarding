@@ -7,7 +7,7 @@
 // wrapped so a single failure degrades gracefully instead of killing the flow.
 
 import { config } from "./config";
-import { generateJson } from "./anthropic";
+import { generateJson } from "./openrouter";
 import { fetchSiteContent } from "./scrape";
 import { searchWeb, resultsToText } from "./search";
 import { store, makeId } from "./store";

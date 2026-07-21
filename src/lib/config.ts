@@ -3,9 +3,10 @@
 
 export const config = {
   // Model used for all LLM calls (brand understanding, query generation,
-  // visibility judging, ARPU classification). Swap per-task in anthropic.ts if
-  // you want different models for different steps.
-  llmModel: process.env.LLM_MODEL || "claude-opus-4-8",
+  // visibility judging, ARPU classification), routed through OpenRouter.
+  // Swap per-task in openrouter.ts if you want different models for different
+  // steps. See https://openrouter.ai/models for available model slugs.
+  llmModel: process.env.LLM_MODEL || "anthropic/claude-sonnet-4.5",
 
   // The ARPU branch threshold, in USD.
   arpuThresholdUsd: Number(process.env.ARPU_THRESHOLD_USD || 150),

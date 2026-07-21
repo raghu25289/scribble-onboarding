@@ -44,7 +44,7 @@ Required env vars (see `.env.example`):
 
 | Var | Purpose |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | LLM calls (brand, queries, visibility, ARPU) |
+| `OPENROUTER_API_KEY` | LLM calls (brand, queries, visibility, ARPU) |
 | `TAVILY_API_KEY` *or* `SERPER_API_KEY` | Web search. Set `SEARCH_PROVIDER=serper` to use Serper. |
 
 Optional: `LLM_MODEL`, `ARPU_THRESHOLD_USD`, `SEARCH_PROVIDER`, `LEAD_STORE_PATH`.
@@ -97,7 +97,7 @@ src/
   lib/
     prompts.ts               ← EDITABLE prompts
     config.ts                models, thresholds, provider
-    anthropic.ts             LLM client + structured-output helper
+    openrouter.ts            LLM client + structured-output helper
     search.ts                Tavily/Serper behind searchWeb()
     scrape.ts                homepage + /pricing fetch (graceful)
     analyze.ts               orchestration for steps 2–4
@@ -106,9 +106,9 @@ src/
     types.ts                 shared types + the streaming event protocol
 ```
 
-All LLM calls are server-side (API routes); keys never reach the client. LLM outputs are
-pinned with structured-output JSON schemas (`output_config.format`) so responses are
-always valid JSON in the expected shape.
+All LLM calls are server-side (API routes) and go through OpenRouter; keys never reach
+the client. LLM outputs are pinned with structured-output JSON schemas
+(`response_format: json_schema`) so responses are always valid JSON in the expected shape.
 
 ## Deploy to Vercel
 
@@ -116,6 +116,6 @@ always valid JSON in the expected shape.
 vercel
 ```
 
-Set `ANTHROPIC_API_KEY` and your search key in the Vercel project env. `vercel.json`
+Set `OPENROUTER_API_KEY` and your search key in the Vercel project env. `vercel.json`
 gives `/api/analyze` a 300s max duration for the multi-step agent. Review incoming leads
 in the function logs (or swap the store for a database as above).
