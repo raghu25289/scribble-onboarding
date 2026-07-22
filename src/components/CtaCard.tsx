@@ -26,7 +26,13 @@ export default function CtaCard({
   const [showBooking, setShowBooking] = useState(false);
 
   useEffect(() => {
-    if (!showBooking || !calLink) return;
+    if (!showBooking) return;
+    if (!calLink) {
+      console.warn(
+        "[CtaCard] NEXT_PUBLIC_CAL_LINK is not set; skipping Cal.com embed init."
+      );
+      return;
+    }
     (async function () {
       const cal = await getCalApi({ namespace: CAL_NAMESPACE });
       cal("ui", { theme: "dark" });

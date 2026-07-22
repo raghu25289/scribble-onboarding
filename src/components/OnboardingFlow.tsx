@@ -168,14 +168,6 @@ export default function OnboardingFlow() {
   );
 
   // ── render ────────────────────────────────────────────────────────────────
-  if (phase === "capture") {
-    return (
-      <div className="flex flex-1 items-center py-14">
-        <CaptureForm onSubmit={start} />
-      </div>
-    );
-  }
-
   const resolvedVisibility = visibility.filter(
     (v): v is VisibilityResult => v !== null
   );
@@ -183,10 +175,20 @@ export default function OnboardingFlow() {
   const showResults = queries.length > 0;
   const allDone = resolvedVisibility.length === queries.length && queries.length > 0;
 
+  // Hooks must run unconditionally on every render, so this stays above the
+  // capture-phase early return below.
   const topInvisibleCompetitor = useMemo(
     () => topCompetitor(resolvedVisibility.filter((v) => !v.visible)),
     [resolvedVisibility]
   );
+
+  if (phase === "capture") {
+    return (
+      <div className="flex flex-1 items-center py-14">
+        <CaptureForm onSubmit={start} />
+      </div>
+    );
+  }
 
   return (
     <div className="mt-10 space-y-6 pb-10">
