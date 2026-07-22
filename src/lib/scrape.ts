@@ -5,6 +5,7 @@
 import { config } from "./config";
 
 export interface SiteContent {
+  homepageHtml: string | null; // raw HTML, kept for the onsite-pillar link probe
   homepageText: string;
   pricingText: string | null;
   homepageReachable: boolean;
@@ -58,6 +59,50 @@ function htmlToText(html: string): string {
 // Common pricing page paths to probe when it's not linked obviously.
 const PRICING_PATHS = ["/pricing", "/plans", "/price", "/pricing/"];
 
+// Probes a set of candidate paths (plus any homepage hrefs matching
+// `linkPattern`) against `baseUrl`, returning the text of the first page
+// whose content matches `contentMatch`. Shared by pricing detection here and
+// by the onsite-pillar comparison/alternatives content probe.
+export async function probePaths(
+  baseUrl: string,
+  homepageHtml: string | null,
+  paths: string[],
+  linkPattern: RegExp,
+  contentMatch: RegExp
+): Promise<{ url: string; text: string } | null> {
+  const candidates = new Set<string>();
+  if (homepageHtml) {
+    const hrefs = [...homepageHtml.matchAll(/href=["']([^"']+)["']/gi)].map((m) => m[1]);
+    for (const href of hrefs) {
+      if (linkPattern.test(href)) {
+        try {
+          candidates.add(new URL(href, baseUrl).toString());
+        } catch {
+          /* ignore malformed href */
+        }
+      }
+    }
+  }
+  for (const p of paths) {
+    try {
+      candidates.add(new URL(p, baseUrl).toString());
+    } catch {
+      /* ignore */
+    }
+  }
+
+  for (const url of candidates) {
+    const html = await fetchText(url);
+    if (html) {
+      const text = htmlToText(html);
+      if (contentMatch.test(text)) {
+        return { url, text };
+      }
+    }
+  }
+  return null;
+}
+
 export async function fetchSiteContent(baseUrl: string): Promise<SiteContent> {
   const notes: string[] = [];
 
@@ -71,46 +116,19 @@ export async function fetchSiteContent(baseUrl: string): Promise<SiteContent> {
 
   // Try to find a pricing page. First look for a linked /pricing in the homepage
   // HTML, then fall back to common paths.
-  let pricingText: string | null = null;
-  let pricingFound = false;
-
-  const candidates = new Set<string>();
-  if (homepageHtml) {
-    const hrefs = [...homepageHtml.matchAll(/href=["']([^"']+)["']/gi)].map((m) => m[1]);
-    for (const href of hrefs) {
-      if (/pricing|\/plans/i.test(href)) {
-        try {
-          candidates.add(new URL(href, baseUrl).toString());
-        } catch {
-          /* ignore malformed href */
-        }
-      }
-    }
-  }
-  for (const p of PRICING_PATHS) {
-    try {
-      candidates.add(new URL(p, baseUrl).toString());
-    } catch {
-      /* ignore */
-    }
-  }
-
-  for (const url of candidates) {
-    const html = await fetchText(url);
-    if (html) {
-      const text = htmlToText(html);
-      // Heuristic: a real pricing page mentions money or plan words.
-      if (/\$|\bprice|\bplan|\bper month|\bper year|\/mo\b|free trial|contact sales/i.test(text)) {
-        pricingText = text;
-        pricingFound = true;
-        break;
-      }
-    }
-  }
+  const pricing = await probePaths(
+    baseUrl,
+    homepageHtml,
+    PRICING_PATHS,
+    /pricing|\/plans/i,
+    /\$|\bprice|\bplan|\bper month|\bper year|\/mo\b|free trial|contact sales/i
+  );
+  const pricingText = pricing?.text ?? null;
+  const pricingFound = !!pricing;
 
   if (!pricingFound) {
     notes.push("No pricing page found — ARPU will be inferred from the product category.");
   }
 
-  return { homepageText, pricingText, homepageReachable, pricingFound, notes };
+  return { homepageHtml, homepageText, pricingText, homepageReachable, pricingFound, notes };
 }

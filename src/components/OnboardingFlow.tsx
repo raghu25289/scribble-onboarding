@@ -6,16 +6,19 @@ import ProgressPanel from "./ProgressPanel";
 import ResultsScreen from "./ResultsScreen";
 import ArpuCard from "./ArpuCard";
 import CostCard from "./CostCard";
+import CitationScoreSection from "./CitationScoreSection";
 import CtaCard from "./CtaCard";
 import { topCompetitor } from "@/lib/costEstimate";
+import { aggregateQuery, computeHeadlineScore, isQueryFullyChecked } from "@/lib/engineVisibility";
 import type {
   AnalyzeEvent,
   AnalyzeStep,
   ArpuVerdict,
   BrandUnderstanding,
   Lead,
+  PillarScores,
+  QueryVisibility,
   QueryWithDemand,
-  VisibilityResult,
 } from "@/lib/types";
 
 type Phase = "capture" | "analyzing" | "done" | "error";
@@ -29,8 +32,9 @@ export default function OnboardingFlow() {
 
   const [brand, setBrand] = useState<BrandUnderstanding | null>(null);
   const [queries, setQueries] = useState<QueryWithDemand[]>([]);
-  const [visibility, setVisibility] = useState<(VisibilityResult | null)[]>([]);
+  const [visibility, setVisibility] = useState<QueryVisibility[]>([]);
   const [arpu, setArpu] = useState<ArpuVerdict | null>(null);
+  const [pillars, setPillars] = useState<PillarScores | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
 
   const startedRef = useRef(false);
@@ -58,20 +62,29 @@ export default function OnboardingFlow() {
         case "queries":
           markStepComplete("generate_queries");
           setQueries(ev.data);
-          setVisibility(new Array(ev.data.length).fill(null));
+          setVisibility(ev.data.map((q) => ({ query: q.text, engines: {} })));
           setActiveStep("check_visibility");
           break;
-        case "visibility":
+        case "engine_result":
           setVisibility((prev) => {
-            const next = [...prev];
-            next[ev.index] = ev.data;
+            const next = prev.map((qv, i) =>
+              i === ev.queryIndex
+                ? { ...qv, engines: { ...qv.engines, [ev.engine]: ev.data } }
+                : qv
+            );
+            if (next.length > 0 && next.every(isQueryFullyChecked)) {
+              markStepComplete("check_visibility");
+            }
             return next;
           });
-          if (ev.index === ev.total - 1) markStepComplete("check_visibility");
           break;
         case "arpu":
           markStepComplete("classify_arpu");
           setArpu(ev.data);
+          break;
+        case "pillars":
+          markStepComplete("assess_pillars");
+          setPillars(ev.data);
           break;
         case "done":
           setPhase("done");
@@ -168,19 +181,18 @@ export default function OnboardingFlow() {
   );
 
   // ── render ────────────────────────────────────────────────────────────────
-  const resolvedVisibility = visibility.filter(
-    (v): v is VisibilityResult => v !== null
-  );
-  const visibleCount = resolvedVisibility.filter((v) => v.visible).length;
   const showResults = queries.length > 0;
-  const allDone = resolvedVisibility.length === queries.length && queries.length > 0;
+  const allDone = queries.length > 0 && visibility.length > 0 && visibility.every(isQueryFullyChecked);
+  const { visible: visibleChecks, total: totalChecks } = computeHeadlineScore(visibility);
 
   // Hooks must run unconditionally on every render, so this stays above the
   // capture-phase early return below.
-  const topInvisibleCompetitor = useMemo(
-    () => topCompetitor(resolvedVisibility.filter((v) => !v.visible)),
-    [resolvedVisibility]
-  );
+  const topInvisibleCompetitor = useMemo(() => {
+    const invisibleAggregates = visibility
+      .map(aggregateQuery)
+      .filter((agg) => agg.invisible);
+    return topCompetitor(invisibleAggregates);
+  }, [visibility]);
 
   if (phase === "capture") {
     return (
@@ -230,15 +242,17 @@ export default function OnboardingFlow() {
           brand={domain}
           arpu={arpu}
           queries={queries}
-          visibility={resolvedVisibility}
+          visibility={visibility}
         />
       )}
+
+      {pillars && <CitationScoreSection pillars={pillars} />}
 
       {phase === "done" && arpu && (
         <CtaCard
           domain={domain}
-          visibleCount={visibleCount}
-          total={queries.length}
+          visibleCount={visibleChecks}
+          total={totalChecks}
           topInvisibleCompetitor={topInvisibleCompetitor}
         />
       )}

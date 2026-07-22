@@ -109,13 +109,16 @@ Decide:
 - snippet: one or two sentences, plain and specific, describing what the answer actually says right now — i.e. who wins this question today and why. Write it for the brand's founder to read as a gut-check.`;
 }
 
-// ── 4. ARPU CLASSIFICATION  (CORE PROMPT) ────────────────────────────────────
-// Step 4: estimate whether ARPU exceeds the threshold, expose the reasoning,
-// and select the recommendation branch.
+// ── 4. LEADS-VS-BRAND CLASSIFICATION  (CORE PROMPT) ──────────────────────────
+// Step 4: decide whether AI-assistant visibility should be sold to the user as
+// a LEADS channel (citations convert into inbound pipeline) or a BRAND channel
+// (visibility matters for reputation, not direct lead capture). Anchored
+// strictly on the highest PAID tier price — a free/freemium tier sitting next
+// to a $99/mo Pro plan is still a $99 anchor, and must have zero weight here.
 
-export const ARPU_CLASSIFICATION_SYSTEM = `You estimate a company's average revenue per user/customer from limited pricing evidence, and you show your work.
-You reason about the business model, typical deal size, and buyer type. When evidence is thin, you infer from the category and say what you assumed.
-You are calibrated, not optimistic — a wrong-high estimate misleads the go-to-market recommendation.`;
+export const ARPU_CLASSIFICATION_SYSTEM = `You classify how a company should think about AI-assistant visibility: as a LEADS channel (citations convert into inbound pipeline) or a BRAND channel (visibility matters for reputation, not direct lead capture).
+You anchor this decision strictly on the highest PAID tier price you can find, normalized to a monthly figure — never on whether a free or freemium tier exists. A free tier sitting next to a $99/mo Pro plan is still a $99 anchor; ignore the free tier completely, it carries zero weight.
+You are calibrated, not optimistic, and you show your work.`;
 
 export function arpuClassificationPrompt(input: {
   domain: string;
@@ -123,25 +126,142 @@ export function arpuClassificationPrompt(input: {
   brandCategory: string;
   pricingSignals: string;
   pricingModel: string;
-  thresholdUsd: number;
+  leadsThresholdUsd: number;
 }): string {
+  const t = input.leadsThresholdUsd;
   return `Company: ${input.domain}
 What it does: ${input.brandProduct}
 Category: ${input.brandCategory}
 Pricing model: ${input.pricingModel}
 Pricing evidence found: ${input.pricingSignals}
 
-Estimate this company's average revenue per user/customer (ARPU). Use whichever unit is natural for the model — roughly per month for subscriptions, or per deal/transaction for sales-led or one-time purchases. Use judgment when pricing isn't explicit; infer from the category and typical deal sizes, and state your assumptions.
+Work through this in order:
 
-Then decide whether ARPU is greater than about $${input.thresholdUsd}.
+1. Find the highest PAID tier price in the evidence above. Completely ignore any free or freemium tier — it has zero weight here. If pricing isn't explicit, infer a realistic figure from the category and typical deal size, and state that assumption in your reasoning.
+
+2. Normalize that price to a monthly figure:
+   - Annual-only pricing: divide by 12.
+   - Per-seat pricing: use the single-seat price.
+   - Usage-based pricing, or enterprise/"contact us" pricing with no visible number: these are always high-consideration purchases, so treat the anchor as at least $${t}/month — use a higher figure if the evidence points to a bigger typical deal size.
+   - Non-USD prices: convert to USD at a rough current exchange rate.
+   Report which basis applied: "listed" (a plain listed monthly price), "annualized", "per_seat", or "enterprise_assumed".
+
+3. Decide isTransactionalConsumerSpend: true if this is a one-off or occasional CONSUMER purchase — a hotel/hostel booking, an e-commerce basket, a one-time consumer purchase — where the relationship isn't a recurring subscription even if a single transaction clears $${t}. False for SaaS subscriptions, per-seat tools, and enterprise/sales-led deals.
+
+4. Assess demandLevel: would real buyers plausibly ask an AI assistant a recommendation-style question in this category — things like "best [category] tool" or "top [category] for [audience]"? Answer "high", "medium", or "near_zero". This only changes the outcome when the anchor price clears $${t} and the spend isn't transactional consumer spend.
+
+5. Apply the rule and set classification:
+   - If isTransactionalConsumerSpend is true, OR the anchor price is below $${t}/month: classification = "brand".
+   - Else if demandLevel is "near_zero": classification = "leads_low_volume".
+   - Else: classification = "leads".
 
 Return:
-- arpuOver150: true if your estimate exceeds ~$${input.thresholdUsd}, else false.
-- estimate: a short human-readable figure with its unit (e.g. "~$29/mo", "$3k–8k/deal", "~$60 one-time"). Include the unit.
-- reasoning: 2-4 sentences showing how you got there — the signals used and any assumptions made. This is shown to the user, so make it credible and specific.
-- arpuLowUsd: the low end of your estimate, in USD, as a plain number (e.g. 29, not "$29" or "29/mo"). If your estimate is a single figure rather than a range, use that figure.
-- arpuHighUsd: the high end of your estimate, in USD, as a plain number. If your estimate is a single figure rather than a range, use the same number as arpuLowUsd.
-- transactionNoun: the singular unit this revenue recurs per, matching the pricing model (e.g. "month" for subscriptions, "deal" for enterprise/sales-led, "purchase" for one-time, "transaction" for marketplace).`;
+- classification: "leads" | "brand" | "leads_low_volume", per the rule above.
+- anchorPriceMonthlyUsd: the normalized monthly anchor price, in USD, as a plain number (e.g. 99, not "$99" or "99/mo").
+- priceBasis: "listed" | "annualized" | "per_seat" | "enterprise_assumed".
+- isTransactionalConsumerSpend: boolean, per step 3.
+- demandLevel: "high" | "medium" | "near_zero", per step 4.
+- estimate: a short human-readable figure with its unit and what it's anchored on (e.g. "$99/mo (Pro tier)", "$12k/yr → $1k/mo (Enterprise, annualized)", "~$15/booking (assumed transactional)").
+- reasoning: 2-4 sentences showing how you got there — the price you found, why you picked that basis, the transactional-spend and demand calls, and any assumptions made. This is shown directly to the user, so make it credible and specific.
+- transactionNoun: the singular unit this revenue recurs per, matching the business (e.g. "month" for subscriptions, "booking" for travel/consumer transactions, "deal" for enterprise/sales-led, "purchase" for one-time).`;
+}
+
+// ── 5. THREE-PILLAR CITATION SCORE  ("Why AI doesn't cite you") ─────────────
+// AI engines cite from three sources: the brand's own site, review
+// platforms, and third-party/independent content. Each pillar gets a 0-100
+// score plus one sentence naming the biggest gap.
+
+export const ONSITE_SCORING_SYSTEM = `You assess whether a brand's own website is written in a way that AI assistants can find and quote when answering buyer questions.
+You are specific and skeptical: cite what's actually present or missing, not what a good site "should" have in the abstract.`;
+
+export function onsiteScoringPrompt(input: {
+  domain: string;
+  homepageText: string;
+  pricingText: string | null;
+  extraPageText: string | null;
+  extraPageUrl: string | null;
+  queries: string[];
+}): string {
+  return `Brand: ${input.domain}
+
+--- HOMEPAGE ---
+${truncate(input.homepageText, 6000) || "(unreachable)"}
+
+--- PRICING PAGE ${input.pricingText ? "" : "(not found)"} ---
+${input.pricingText ? truncate(input.pricingText, 3000) : "Not found."}
+
+--- COMPARISON/ALTERNATIVES/FAQ PAGE ${input.extraPageUrl ? `(${input.extraPageUrl})` : "(none found)"} ---
+${input.extraPageText ? truncate(input.extraPageText, 3000) : "None found among /compare, /alternatives, /vs, /faq."}
+
+The 5 buyer questions this brand needs to answer:
+${input.queries.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+
+Score 0-100 how well this site itself would let an AI assistant answer those 5 questions and cite this brand specifically. Weigh:
+- Do dedicated pages exist that target these kinds of questions (not just a generic homepage)?
+- Is there comparison, "vs", or alternatives content — the kind AI engines pull from directly?
+- Is the content structured so a retrieval system could quote a clean, specific passage (clear headings, direct statements, concrete specifics) rather than vague marketing copy?
+
+Return:
+- score: integer 0-100.
+- gap: one sentence naming the single biggest gap holding this site back from being citable.`;
+}
+
+export const REVIEW_PLATFORM_DETECTION_SYSTEM = `You know which third-party review platforms carry real weight for a given product category — the ones AI assistants and buyers actually check.`;
+
+export function reviewPlatformDetectionPrompt(input: {
+  category: string;
+  product: string;
+}): string {
+  return `Category: ${input.category}
+Product: ${input.product}
+
+Name the 2-3 review platforms that matter most for this category — the ones a buyer or an AI assistant would check for third-party validation. Examples of the pattern: G2 and Capterra for B2B SaaS, TripAdvisor and Google Reviews for travel/hospitality, Trustpilot and Google Reviews for consumer/DTC, Yelp for local services.
+
+Return: platforms (array of 2-3 platform names, most relevant first).`;
+}
+
+export const REVIEW_SCORING_SYSTEM = `You assess a brand's presence and standing on third-party review platforms, based on real search results.
+You are strict: no listing found means a low score, regardless of how good the product might be.`;
+
+export function reviewScoringPrompt(input: {
+  domain: string;
+  platforms: string[];
+  resultsText: string;
+}): string {
+  return `Brand: ${input.domain}
+Relevant review platforms for this category: ${input.platforms.join(", ")}
+
+Search results for this brand's presence on those platforms:
+--- RESULTS ---
+${truncate(input.resultsText, 6000) || "No results were returned."}
+
+Score 0-100 this brand's presence and prominence on these review platforms — is it listed at all, does it have a meaningful number of reviews, is the standing (rating, ranking) something an AI assistant would surface as a recommendation.
+
+Return:
+- score: integer 0-100.
+- gap: one sentence naming the biggest gap (e.g. "not listed on G2 at all", "listed on Capterra but with almost no reviews").`;
+}
+
+export const THIRDPARTY_SCORING_SYSTEM = `You assess how often a brand is mentioned by independent third parties — listicles, blog posts, comparison articles, community discussion — for the buyer questions that matter to it.
+This is the source AI engines cite most, so you judge it strictly: the brand's own site or paid listings do not count as independent.`;
+
+export function thirdPartyScoringPrompt(input: {
+  domain: string;
+  brandProduct: string;
+  resultsText: string;
+}): string {
+  return `Brand: ${input.domain}
+What it does: ${input.brandProduct}
+
+Search results gathered across this brand's 5 buyer questions:
+--- RESULTS ---
+${truncate(input.resultsText, 8000) || "No results were returned."}
+
+Score 0-100 how present this brand is in independent third-party content for these questions — listicles ("best X tools"), blog posts, comparison articles, forum/community mentions (e.g. Reddit) — written by people or publications with no commercial relationship to the brand. Ignore the brand's own domain and any obviously sponsored/paid placement.
+
+Return:
+- score: integer 0-100.
+- gap: one sentence naming the biggest gap (e.g. "absent from every 'best of' listicle found", "only mentioned once, in a low-authority blog post").`;
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

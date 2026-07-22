@@ -11,7 +11,8 @@ const PHASES: PhaseState[] = [
   { key: "fetch_site", label: "Reading your website" },
   { key: "understand_brand", label: "Understanding what you do" },
   { key: "generate_queries", label: "Finding the 5 buyer questions" },
-  { key: "check_visibility", label: "Checking your visibility in each answer" },
+  { key: "check_visibility", label: "Checking Perplexity, ChatGPT & the open web" },
+  { key: "assess_pillars", label: "Scoring why AI does or doesn't cite you" },
   { key: "classify_arpu", label: "Tailoring your recommendation" },
 ];
 

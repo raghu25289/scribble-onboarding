@@ -1,15 +1,19 @@
 "use client";
 
-import type { VisibilityResult } from "@/lib/types";
+import { aggregateQuery } from "@/lib/engineVisibility";
+import type { QueryVisibility } from "@/lib/types";
+import EngineChips from "./EngineChips";
 
 interface Props {
   index: number;
   query: string;
-  result: VisibilityResult | null; // null while still resolving
+  visibility: QueryVisibility;
 }
 
-export default function VisibilityRow({ index, query, result }: Props) {
-  const pending = result === null;
+export default function VisibilityRow({ index, query, visibility }: Props) {
+  const web = visibility.engines.web;
+  const agg = aggregateQuery(visibility);
+  const webPending = web === undefined;
 
   return (
     <div
@@ -21,24 +25,22 @@ export default function VisibilityRow({ index, query, result }: Props) {
           <span className="mr-2 text-[var(--muted)]">{index + 1}.</span>
           {query}
         </p>
-        <Badge pending={pending} visible={result?.visible ?? false} />
       </div>
 
       <div className="mt-3">
-        {pending ? (
+        {webPending ? (
           <div className="space-y-2">
             <div className="skeleton h-3 w-4/5 rounded" />
             <div className="skeleton h-3 w-3/5 rounded" />
           </div>
-        ) : (
+        ) : web.ok ? (
           <>
-            <p className="text-sm leading-relaxed text-[var(--muted)]">
-              {result!.snippet}
-            </p>
-            {!result!.visible && result!.winners.length > 0 && (
+            <p className="text-xs font-medium text-[var(--muted)]">Open web baseline</p>
+            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{web.snippet}</p>
+            {agg.winners.length > 0 && (
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-[var(--muted)]">Winning today:</span>
-                {result!.winners.map((w, i) => (
+                {agg.winners.map((w, i) => (
                   <span
                     key={i}
                     className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
@@ -49,36 +51,16 @@ export default function VisibilityRow({ index, query, result }: Props) {
               </div>
             )}
           </>
+        ) : (
+          <p className="text-sm leading-relaxed text-[var(--muted)]">
+            Open web baseline couldn&apos;t be checked for this question.
+          </p>
         )}
       </div>
-    </div>
-  );
-}
 
-function Badge({ pending, visible }: { pending: boolean; visible: boolean }) {
-  if (pending) {
-    return (
-      <span className="shrink-0 rounded-full border border-[var(--panel-line)] px-2.5 py-1 text-xs text-[var(--muted)]">
-        checking…
-      </span>
-    );
-  }
-  if (visible) {
-    return (
-      <span
-        className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold text-[var(--ink)]"
-        style={{ background: "var(--win)" }}
-      >
-        Visible
-      </span>
-    );
-  }
-  return (
-    <span
-      className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold text-[var(--ink)]"
-      style={{ background: "var(--miss)" }}
-    >
-      Invisible
-    </span>
+      <div className="mt-3">
+        <EngineChips visibility={visibility} />
+      </div>
+    </div>
   );
 }

@@ -1,34 +1,43 @@
 // Orchestration for Steps 2–4. Given a lead, this walks the whole agent:
-//   fetch site → understand brand → generate queries → check each query's
-//   visibility → classify ARPU → log the completed onboarding.
+//   fetch site → understand brand → generate queries → then four branches run
+//   concurrently (engine visibility per query, ARPU classification, the
+//   onsite/review-sites pillars, and the third-party-mentions pillar) → log
+//   the completed onboarding.
 //
 // It reports progress through an `emit` callback (one AnalyzeEvent at a time) so
 // the API route can stream results to the UI as they complete. Every step is
 // wrapped so a single failure degrades gracefully instead of killing the flow.
 
 import { config } from "./config";
+import { createCostTracker, formatCostBreakdown } from "./cost";
 import { generateJson } from "./openrouter";
 import { fetchSiteContent } from "./scrape";
-import { searchWeb, resultsToText } from "./search";
+import { checkEngineVisibility, fetchWebSearch } from "./engines";
+import type { SearchResponse } from "./search";
 import { store, makeId } from "./store";
 import { getAhrefsVolume } from "./ahrefs";
+import { deriveClassification } from "./classification";
+import { assessOnsite, assessReviewSites, assessThirdParty } from "./pillars";
 import {
   BRAND_UNDERSTANDING_SYSTEM,
   brandUnderstandingPrompt,
   QUERY_GENERATION_SYSTEM,
   queryGenerationPrompt,
-  VISIBILITY_JUDGE_SYSTEM,
-  visibilityJudgePrompt,
   ARPU_CLASSIFICATION_SYSTEM,
   arpuClassificationPrompt,
 } from "./prompts";
 import type {
   AnalyzeEvent,
   BrandUnderstanding,
+  Classification,
+  DemandLevel,
+  EngineId,
   Lead,
   OnboardingRecord,
+  PillarScores,
+  PriceBasis,
+  QueryVisibility,
   QueryWithDemand,
-  VisibilityResult,
   ArpuVerdict,
 } from "./types";
 
@@ -69,34 +78,30 @@ const queriesSchema = {
   required: ["queries"],
 };
 
-const visibilitySchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    visible: { type: "boolean" },
-    winners: { type: "array", items: { type: "string" } },
-    snippet: { type: "string" },
-  },
-  required: ["visible", "winners", "snippet"],
-};
-
 const arpuSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
-    arpuOver150: { type: "boolean" },
+    classification: { type: "string", enum: ["leads", "brand", "leads_low_volume"] },
+    anchorPriceMonthlyUsd: { type: "number" },
+    priceBasis: {
+      type: "string",
+      enum: ["listed", "annualized", "per_seat", "enterprise_assumed"],
+    },
+    isTransactionalConsumerSpend: { type: "boolean" },
+    demandLevel: { type: "string", enum: ["high", "medium", "near_zero"] },
     estimate: { type: "string" },
     reasoning: { type: "string" },
-    arpuLowUsd: { type: "number" },
-    arpuHighUsd: { type: "number" },
     transactionNoun: { type: "string" },
   },
   required: [
-    "arpuOver150",
+    "classification",
+    "anchorPriceMonthlyUsd",
+    "priceBasis",
+    "isTransactionalConsumerSpend",
+    "demandLevel",
     "estimate",
     "reasoning",
-    "arpuLowUsd",
-    "arpuHighUsd",
     "transactionNoun",
   ],
 };
@@ -111,12 +116,16 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
     queries: [],
     visibility: [],
     arpu: null,
+    pillars: null,
     completedAt: "",
   };
 
+  const tracker = createCostTracker();
+
   // ── Step 2a: fetch the site ────────────────────────────────────────────────
   emit({ type: "status", step: "fetch_site", message: `Fetching ${lead.domain}…` });
-  const site = await fetchSiteContent(`https://${lead.domain}`);
+  const baseUrl = `https://${lead.domain}`;
+  const site = await fetchSiteContent(baseUrl);
   for (const note of site.notes) {
     emit({ type: "status", step: "fetch_site", message: note });
   }
@@ -133,6 +142,8 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         pricingText: site.pricingText,
       }),
       schema: brandSchema,
+      tracker,
+      costLabel: "brand_understanding",
     });
   } catch (e) {
     // Fatal-ish: without brand understanding, the rest is guesswork. Fall back to
@@ -167,6 +178,8 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         brandCategory: brand.category,
       }),
       schema: queriesSchema,
+      tracker,
+      costLabel: "query_generation",
     });
     queries = (out.queries || []).slice(0, config.queryCount);
 
@@ -196,96 +209,162 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   record.queries = queries;
   emit({ type: "queries", data: queries });
 
-  // ── Step 3: visibility check per query (streamed as each resolves) ──────────
-  emit({ type: "status", step: "check_visibility", message: "Checking whether you show up in each answer…" });
-  const visibility: VisibilityResult[] = [];
-  for (let i = 0; i < queries.length; i++) {
-    const query = queries[i].text;
-    let result: VisibilityResult;
-    try {
-      const search = await searchWeb(query);
-      if (!search.ok) {
-        emit({
-          type: "status",
-          step: "check_visibility",
-          message: `Search issue on query ${i + 1}: ${search.error}. Judging from limited data.`,
-        });
-      }
-      const judged = await generateJson<{ visible: boolean; winners: string[]; snippet: string }>({
-        system: VISIBILITY_JUDGE_SYSTEM,
-        prompt: visibilityJudgePrompt({
+  // ── Steps 3 + 4: four branches run concurrently from here ──────────────────
+  emit({
+    type: "status",
+    step: "check_visibility",
+    message: "Checking Perplexity, ChatGPT, and the open web for each question…",
+  });
+  emit({ type: "status", step: "assess_pillars", message: "Scoring why AI does or doesn't cite you…" });
+
+  const queryVisibilities: QueryVisibility[] = queries.map((q) => ({ query: q.text, engines: {} }));
+  const webSearchResults: SearchResponse[] = [];
+
+  // Branch A: all 5 queries in parallel, each running its 3 engines in
+  // parallel and emitting as each one lands (order across queries/engines
+  // doesn't matter — the UI is keyed by queryIndex + engine, not arrival order).
+  const queryLoop = Promise.allSettled(
+    queries.map(async (q, i) => {
+      const emitEngine = (engine: EngineId) => (result: Awaited<ReturnType<typeof checkEngineVisibility>>) => {
+        queryVisibilities[i].engines[engine] = result;
+        emit({ type: "engine_result", queryIndex: i, total: queries.length, engine, data: result });
+        return result;
+      };
+
+      const webSearchPromise = fetchWebSearch(q.text, tracker);
+      const webPromise = webSearchPromise.then((search) => {
+        webSearchResults[i] = search;
+        return checkEngineVisibility({
+          engine: "web",
+          query: q.text,
           brandDomain: lead.domain,
           brandProduct: brand.product,
-          query,
-          resultsText: resultsToText(search),
-        }),
-        schema: visibilitySchema,
-        maxTokens: 1200,
+          tracker,
+          webSearchResponse: search,
+        }).then(emitEngine("web"));
       });
-      result = {
-        query,
-        visible: judged.visible,
-        snippet: judged.snippet,
-        winners: judged.winners || [],
-      };
-    } catch (e) {
-      // Degrade this single row rather than the whole flow.
-      result = {
-        query,
-        visible: false,
-        snippet: `Couldn't complete the check for this query (${(e as Error).message}).`,
-        winners: [],
-      };
-    }
-    visibility.push(result);
-    emit({ type: "visibility", index: i, total: queries.length, data: result });
-  }
-  record.visibility = visibility;
 
-  // ── Step 4: ARPU classification + branch ───────────────────────────────────
-  emit({ type: "status", step: "classify_arpu", message: "Estimating your ARPU to tailor the recommendation…" });
-  try {
-    const out = await generateJson<{
-      arpuOver150: boolean;
-      estimate: string;
-      reasoning: string;
-      arpuLowUsd: number;
-      arpuHighUsd: number;
-      transactionNoun: string;
-    }>({
-      system: ARPU_CLASSIFICATION_SYSTEM,
-      prompt: arpuClassificationPrompt({
-        domain: lead.domain,
+      const perplexityPromise = checkEngineVisibility({
+        engine: "perplexity",
+        query: q.text,
+        brandDomain: lead.domain,
         brandProduct: brand.product,
-        brandCategory: brand.category,
-        pricingSignals: brand.pricingSignals,
-        pricingModel: brand.pricingModel,
-        thresholdUsd: config.arpuThresholdUsd,
+        tracker,
+      }).then(emitEngine("perplexity"));
+
+      const chatgptPromise = checkEngineVisibility({
+        engine: "chatgpt",
+        query: q.text,
+        brandDomain: lead.domain,
+        brandProduct: brand.product,
+        tracker,
+      }).then(emitEngine("chatgpt"));
+
+      await Promise.allSettled([webPromise, perplexityPromise, chatgptPromise]);
+    })
+  );
+
+  // Branch B: leads-vs-brand classification. Only ever depended on `brand`, so
+  // it runs alongside the engine loop instead of after it.
+  const arpuBranch = (async (): Promise<ArpuVerdict | null> => {
+    try {
+      const out = await generateJson<{
+        classification: Classification;
+        anchorPriceMonthlyUsd: number;
+        priceBasis: PriceBasis;
+        isTransactionalConsumerSpend: boolean;
+        demandLevel: DemandLevel;
+        estimate: string;
+        reasoning: string;
+        transactionNoun: string;
+      }>({
+        system: ARPU_CLASSIFICATION_SYSTEM,
+        prompt: arpuClassificationPrompt({
+          domain: lead.domain,
+          brandProduct: brand.product,
+          brandCategory: brand.category,
+          pricingSignals: brand.pricingSignals,
+          pricingModel: brand.pricingModel,
+          leadsThresholdUsd: config.leadsThresholdUsd,
+        }),
+        schema: arpuSchema,
+        tracker,
+        costLabel: "classify_arpu",
+      });
+      // The deterministic rule is the source of truth, not the model's own
+      // self-labeled `classification` field — the model is reliable at pricing
+      // and demand estimates, less reliable at consistently applying the
+      // threshold rule to its own output.
+      const verdict: ArpuVerdict = {
+        classification: deriveClassification({
+          anchorPriceMonthlyUsd: out.anchorPriceMonthlyUsd,
+          isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
+          demandLevel: out.demandLevel,
+          thresholdUsd: config.leadsThresholdUsd,
+        }),
+        anchorPriceMonthlyUsd: out.anchorPriceMonthlyUsd,
+        priceBasis: out.priceBasis,
+        isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
+        demandLevel: out.demandLevel,
+        estimate: out.estimate,
+        reasoning: out.reasoning,
+        transactionNoun: out.transactionNoun,
+      };
+      emit({ type: "arpu", data: verdict });
+      return verdict;
+    } catch (e) {
+      emit({
+        type: "error",
+        step: "classify_arpu",
+        message: `Couldn't classify ARPU (${(e as Error).message}). Showing results without the branch.`,
+        fatal: false,
+      });
+      return null;
+    }
+  })();
+
+  // Branch C: onsite + review-platform pillars run alongside the engine loop
+  // (they only need brand/domain); third-party mentions reuses the web
+  // engine's search results, so it waits for the query loop's web calls to
+  // land before its one synthesis call.
+  const pillarsBranch = (async (): Promise<PillarScores> => {
+    const [onsite, reviews] = await Promise.all([
+      assessOnsite({
+        domain: lead.domain,
+        baseUrl,
+        homepageHtml: site.homepageHtml,
+        homepageText: site.homepageText,
+        pricingText: site.pricingText,
+        queries: queries.map((q) => q.text),
+        tracker,
       }),
-      schema: arpuSchema,
+      assessReviewSites({ domain: lead.domain, brand, tracker }),
+    ]);
+
+    await queryLoop;
+    const thirdparty = await assessThirdParty({
+      domain: lead.domain,
+      brandProduct: brand.product,
+      webSearchResults: webSearchResults.filter(Boolean),
+      tracker,
     });
-    const verdict: ArpuVerdict = {
-      arpuOver150: out.arpuOver150,
-      estimate: out.estimate,
-      reasoning: out.reasoning,
-      branch: out.arpuOver150 ? "lead-gen" : "brand",
-      arpuLowUsd: out.arpuLowUsd,
-      arpuHighUsd: out.arpuHighUsd,
-      transactionNoun: out.transactionNoun,
-    };
-    record.arpu = verdict;
-    emit({ type: "arpu", data: verdict });
-  } catch (e) {
-    emit({
-      type: "error",
-      step: "classify_arpu",
-      message: `Couldn't classify ARPU (${(e as Error).message}). Showing results without the branch.`,
-      fatal: false,
-    });
-  }
+
+    const pillars: PillarScores = { onsite, reviews, thirdparty };
+    emit({ type: "pillars", data: pillars });
+    return pillars;
+  })();
+
+  const [, arpu, pillars] = await Promise.all([queryLoop, arpuBranch, pillarsBranch]);
+
+  record.visibility = queryVisibilities;
+  record.arpu = arpu;
+  record.pillars = pillars;
 
   // ── Step: log the completed onboarding ─────────────────────────────────────
   record.completedAt = new Date().toISOString();
   await store.logOnboarding(record);
+  console.log(
+    `[Scribble] audit cost estimate for ${lead.domain}: $${tracker.total().toFixed(4)} (${formatCostBreakdown(tracker)})`
+  );
   emit({ type: "done", onboardingId: record.id });
 }

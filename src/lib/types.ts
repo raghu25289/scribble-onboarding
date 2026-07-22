@@ -35,6 +35,44 @@ export interface VisibilityResult {
   winners: string[]; // who IS being recommended instead / who wins this query today
 }
 
+// ─── Multi-engine visibility (real engine attribution) ──────────────────────
+// "web" is the original Tavily-backed check, relabeled "Open web baseline" —
+// it's kept for context but excluded from engine chips and from all
+// visible/invisible scoring. Chips and the headline score are reserved for
+// the real engines: Perplexity and ChatGPT.
+export type EngineId = "web" | "perplexity" | "chatgpt";
+
+export interface EngineCheckResult {
+  engine: EngineId;
+  ok: boolean; // false = the call failed or timed out ("Couldn't check"); visible/snippet/winners are meaningless when false
+  visible: boolean;
+  snippet: string;
+  winners: string[];
+  citations: string[];
+  error?: string;
+}
+
+export interface QueryVisibility {
+  query: string;
+  engines: Partial<Record<EngineId, EngineCheckResult>>; // filled in as each engine's check lands
+}
+
+// ─── Three-pillar citation score (the fix) ───────────────────────────────────
+export type PillarId = "onsite" | "reviews" | "thirdparty";
+
+export interface PillarScore {
+  id: PillarId;
+  label: string;
+  score: number; // 0-100
+  gap: string; // one sentence on the biggest gap
+}
+
+export interface PillarScores {
+  onsite: PillarScore;
+  reviews: PillarScore;
+  thirdparty: PillarScore;
+}
+
 // A generated query plus its estimated monthly buyer-demand range. The demand
 // range feeds the "cost of invisibility" estimate on the results page.
 export interface QueryWithDemand {
@@ -43,16 +81,25 @@ export interface QueryWithDemand {
   demandHigh: number; // aggressive monthly ask-volume estimate
 }
 
-export type RecommendationBranch = "lead-gen" | "brand";
+export type Classification = "leads" | "brand" | "leads_low_volume";
+
+// How the anchor price was derived from the pricing evidence.
+export type PriceBasis = "listed" | "annualized" | "per_seat" | "enterprise_assumed";
+
+// Whether buyers plausibly ask an AI assistant a recommendation-style
+// question ("best X for Y") in this category. Only decisive when the anchor
+// price clears the leads threshold — see deriveClassification.
+export type DemandLevel = "high" | "medium" | "near_zero";
 
 export interface ArpuVerdict {
-  arpuOver150: boolean;
-  estimate: string; // human-readable estimate, e.g. "~$40/mo" or "$2k–5k/deal"
-  reasoning: string; // exposed reasoning
-  branch: RecommendationBranch;
-  arpuLowUsd: number; // low end of the estimate, plain USD number
-  arpuHighUsd: number; // high end of the estimate, plain USD number
-  transactionNoun: string; // the unit revenue recurs per, e.g. "month", "deal"
+  classification: Classification;
+  anchorPriceMonthlyUsd: number; // highest paid-tier price, normalized to a monthly USD figure. A free/freemium tier never affects this.
+  priceBasis: PriceBasis;
+  isTransactionalConsumerSpend: boolean; // one-off consumer purchase (booking, basket) vs. a recurring subscription relationship
+  demandLevel: DemandLevel;
+  estimate: string; // human-readable figure, e.g. "$99/mo (Pro tier)"
+  reasoning: string; // exposed reasoning, shown in the "How we estimated this" card
+  transactionNoun: string; // the unit revenue recurs per, e.g. "month", "booking", "deal"
 }
 
 // A completed onboarding record — this is what gets logged for lead review.
@@ -63,8 +110,9 @@ export interface OnboardingRecord {
   domain: string;
   brand: BrandUnderstanding | null;
   queries: QueryWithDemand[];
-  visibility: VisibilityResult[];
+  visibility: QueryVisibility[];
   arpu: ArpuVerdict | null;
+  pillars: PillarScores | null;
   completedAt: string;
 }
 
@@ -75,8 +123,9 @@ export type AnalyzeEvent =
   | { type: "status"; step: AnalyzeStep; message: string }
   | { type: "brand"; data: BrandUnderstanding }
   | { type: "queries"; data: QueryWithDemand[] }
-  | { type: "visibility"; index: number; total: number; data: VisibilityResult }
+  | { type: "engine_result"; queryIndex: number; total: number; engine: EngineId; data: EngineCheckResult }
   | { type: "arpu"; data: ArpuVerdict }
+  | { type: "pillars"; data: PillarScores }
   | { type: "done"; onboardingId: string }
   | { type: "error"; step: AnalyzeStep; message: string; fatal: boolean };
 
@@ -85,5 +134,6 @@ export type AnalyzeStep =
   | "understand_brand"
   | "generate_queries"
   | "check_visibility"
+  | "assess_pillars"
   | "classify_arpu"
   | "log";

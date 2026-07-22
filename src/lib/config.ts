@@ -8,8 +8,9 @@ export const config = {
   // steps. See https://openrouter.ai/models for available model slugs.
   llmModel: process.env.LLM_MODEL || "anthropic/claude-sonnet-4.5",
 
-  // The ARPU branch threshold, in USD.
-  arpuThresholdUsd: Number(process.env.ARPU_THRESHOLD_USD || 150),
+  // Anchor-price threshold (normalized monthly USD) above which AI visibility
+  // is classified as a leads channel rather than a brand channel.
+  leadsThresholdUsd: Number(process.env.LEADS_THRESHOLD_USD || 50),
 
   // Number of high-intent queries to generate + check.
   queryCount: 5,
@@ -20,9 +21,15 @@ export const config = {
   // How many search results to feed the visibility judge per query.
   searchResultsPerQuery: 6,
 
+  // Real-engine model slugs (OpenRouter), used for the per-query engine
+  // attribution checks. See https://openrouter.ai/models.
+  perplexityModel: process.env.PERPLEXITY_ENGINE_MODEL || "perplexity/sonar",
+  chatgptModel: process.env.CHATGPT_ENGINE_MODEL || "openai/gpt-4o:online",
+
   // Timeouts (ms).
   siteFetchTimeoutMs: 12_000,
   searchTimeoutMs: 15_000,
+  engineTimeoutMs: Number(process.env.ENGINE_TIMEOUT_MS || 20_000),
 
   // Where the JSON-file lead store writes (local dev). On Vercel the filesystem
   // is read-only except /tmp, so the store falls back there automatically.
