@@ -45,7 +45,8 @@ Analyze this and return:
 - products: every distinct product or product line you can identify (not plan tiers of the same product — separate physical/SKU-level products, e.g. a phone line and an earbuds line are two products; a SaaS with only "Basic/Pro/Enterprise" tiers is one product). For each, give:
     - name: a short recognizable name (e.g. "Phone (2a)", "Ear (earbuds)", "Pro plan").
     - priceMonthlyUsd: its price, monthly-normalized (annual÷12, single-seat for per-seat, the one-time price itself for one-time purchases — do not divide one-time purchases by 12). If the pages don't state a price for a product, NEVER return 0 — infer a realistic figure from your own knowledge of the brand/category and typical pricing for that product line (e.g. you know roughly what a Nothing Phone or an iPhone costs even without a pricing page). Every product must have a real, positive price.
-  Return at least one entry. If the brand sells one product at one price, return exactly that single entry.`;
+  Return at least one entry. If the brand sells one product at one price, return exactly that single entry.
+- topCompetitors: 1-2 well-known competitors in this category, from your own general knowledge (not from the page content) — real, specific brand/product names a buyer would consider instead. Empty array only if you genuinely don't know the category well enough to name any.`;
 }
 
 // ── 2. QUERY GENERATION  (CORE PROMPT) ───────────────────────────────────────
@@ -256,7 +257,7 @@ export function reviewScoringPrompt(input: {
   return `Brand: ${input.domain}
 Relevant review platforms for this category: ${input.platforms.join(", ")}
 
-Search results for this brand's presence on those platforms:
+Search results for this brand (reviews, comparisons, community mentions) — look for presence on the platforms above specifically:
 --- RESULTS ---
 ${truncate(input.resultsText, 6000) || "No results were returned."}
 
@@ -278,7 +279,7 @@ export function thirdPartyScoringPrompt(input: {
   return `Brand: ${input.domain}
 What it does: ${input.brandProduct}
 
-Search results gathered across this brand's 5 buyer questions:
+Search results for this brand (reviews, comparisons, "best {category}" roundups, community mentions):
 --- RESULTS ---
 ${truncate(input.resultsText, 8000) || "No results were returned."}
 

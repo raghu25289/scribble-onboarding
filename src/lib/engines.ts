@@ -12,7 +12,7 @@ import { TAVILY_ESTIMATED_COST_USD } from "./cost";
 import { generateJson, generateText } from "./openrouter";
 import { VISIBILITY_JUDGE_SYSTEM, visibilityJudgePrompt } from "./prompts";
 import { searchWeb, resultsToText, type SearchResponse } from "./search";
-import type { EngineCheckResult, EngineId } from "./types";
+import type { EngineCheckResult, EngineId, Winner } from "./types";
 
 // One Tavily call per query, shared between the "web" engine check and the
 // third-party-mentions pillar (which reuses these same results — see
@@ -62,6 +62,20 @@ async function rawEngineAnswer(
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
+}
+
+// Cross-checks each winner name the judge named against the actual source
+// text it was given. A name that isn't a literal substring of that text was
+// invented by the judge, not read from the answer — drop it. A name that IS
+// present but came from an answer with zero citation URLs is an uncited
+// claim, more likely to include an "apparently nonexistent" product, so it's
+// kept but flagged unverified rather than dropped outright.
+function validateWinners(names: string[], sourceText: string, citations: string[]): Winner[] {
+  const haystack = sourceText.toLowerCase();
+  const verified = citations.length > 0;
+  return names
+    .filter((name) => haystack.includes(name.toLowerCase()))
+    .map((name) => ({ name, verified }));
 }
 
 function webAnswerFromSearch(
@@ -124,7 +138,7 @@ export async function checkEngineVisibility(args: {
       ok: true,
       visible: judged.visible,
       snippet: judged.snippet,
-      winners: judged.winners || [],
+      winners: validateWinners(judged.winners || [], raw.text, raw.citations),
       citations: raw.citations,
     };
   } catch (e) {

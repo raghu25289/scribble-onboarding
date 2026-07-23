@@ -13,10 +13,9 @@ import { createCostTracker, formatCostBreakdown } from "./cost";
 import { generateJson } from "./openrouter";
 import { fetchSiteContent } from "./scrape";
 import { checkEngineVisibility, fetchWebSearch } from "./engines";
-import type { SearchResponse } from "./search";
 import { store, makeId } from "./store";
 import { deriveClassification } from "./classification";
-import { assessOnsite, assessReviewSites, assessThirdParty } from "./pillars";
+import { assessOnsite, assessReviewSites, assessThirdParty, runAnchoredPillarSearches } from "./pillars";
 import {
   BRAND_UNDERSTANDING_SYSTEM,
   brandUnderstandingPrompt,
@@ -66,8 +65,9 @@ const brandSchema = {
         required: ["name", "priceMonthlyUsd"],
       },
     },
+    topCompetitors: { type: "array", items: { type: "string" } },
   },
-  required: ["product", "audience", "category", "pricingSignals", "pricingModel", "products"],
+  required: ["product", "audience", "category", "pricingSignals", "pricingModel", "products", "topCompetitors"],
 };
 
 const queriesSchema = {
@@ -177,6 +177,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
       pricingSignals: "No pricing evidence available.",
       pricingModel: "unknown",
       products: [],
+      topCompetitors: [],
     };
   }
   record.brand = brand;
@@ -252,7 +253,6 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   emit({ type: "status", step: "assess_pillars", message: "Scoring why AI does or doesn't cite you…" });
 
   const queryVisibilities: QueryVisibility[] = queries.map((q) => ({ query: q.text, engines: {} }));
-  const webSearchResults: SearchResponse[] = [];
 
   // Branch A: all 5 queries in parallel, each running its 3 engines in
   // parallel and emitting as each one lands (order across queries/engines
@@ -267,7 +267,6 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
 
       const webSearchPromise = fetchWebSearch(q.text, tracker);
       const webPromise = webSearchPromise.then((search) => {
-        webSearchResults[i] = search;
         return checkEngineVisibility({
           engine: "web",
           query: q.text,
@@ -359,12 +358,13 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
     }
   })();
 
-  // Branch C: onsite + review-platform pillars run alongside the engine loop
-  // (they only need brand/domain); third-party mentions reuses the web
-  // engine's search results, so it waits for the query loop's web calls to
-  // land before its one synthesis call.
+  // Branch C: all three pillars run alongside the engine loop from the start.
+  // Review platforms and third-party mentions share one brand-anchored search
+  // pass (see runAnchoredPillarSearches) instead of either searching the raw
+  // buyer questions or waiting on the query loop's results.
   const pillarsBranch = (async (): Promise<PillarScores> => {
-    const [onsite, reviews] = await Promise.all([
+    const anchored = await runAnchoredPillarSearches(lead.domain, brand, tracker);
+    const [onsite, reviews, thirdparty] = await Promise.all([
       assessOnsite({
         domain: lead.domain,
         baseUrl,
@@ -374,16 +374,9 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         queries: queries.map((q) => q.text),
         tracker,
       }),
-      assessReviewSites({ domain: lead.domain, brand, tracker }),
+      assessReviewSites({ domain: lead.domain, brand, anchored, tracker }),
+      assessThirdParty({ domain: lead.domain, brandProduct: brand.product, anchored, tracker }),
     ]);
-
-    await queryLoop;
-    const thirdparty = await assessThirdParty({
-      domain: lead.domain,
-      brandProduct: brand.product,
-      webSearchResults: webSearchResults.filter(Boolean),
-      tracker,
-    });
 
     const pillars: PillarScores = { onsite, reviews, thirdparty };
     emit({ type: "pillars", data: pillars });

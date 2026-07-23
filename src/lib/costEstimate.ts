@@ -4,7 +4,7 @@
 // rates below are fixed constants; the only judgment call the model makes is
 // which tier a query belongs to and which product it prices against.
 
-import type { ArpuVerdict, DemandTier, QueryWithDemand } from "./types";
+import type { ArpuVerdict, DemandTier, QueryWithDemand, Winner } from "./types";
 
 export const CURRENCY_SYMBOL = "$";
 
@@ -175,16 +175,16 @@ export function truncateLabel(text: string, max = 48): string {
 // Picks the competitor that shows up most often across the invisible
 // queries' winners, so the CTA can name a single rival. Ties break by first
 // appearance. Returns null when no winners were found at all.
-export function topCompetitor(invisible: { winners: string[] }[]): string | null {
+export function topCompetitor(invisible: { winners: Winner[] }[]): string | null {
   const counts = new Map<string, number>();
   const order: string[] = [];
   for (const r of invisible) {
     for (const w of r.winners) {
-      if (!counts.has(w)) {
-        counts.set(w, 0);
-        order.push(w);
+      if (!counts.has(w.name)) {
+        counts.set(w.name, 0);
+        order.push(w.name);
       }
-      counts.set(w, (counts.get(w) ?? 0) + 1);
+      counts.set(w.name, (counts.get(w.name) ?? 0) + 1);
     }
   }
   if (order.length === 0) return null;
@@ -195,8 +195,8 @@ export function topCompetitor(invisible: { winners: string[] }[]): string | null
 
 // "A", "A and B", or "A, B, and C" — formats up to 3 winner names for the
 // per-query cost-card line item copy.
-export function formatCompetitorList(winners: string[]): string {
-  const names = winners.slice(0, 3);
+export function formatCompetitorList(winners: Winner[]): string {
+  const names = winners.slice(0, 3).map((w) => w.name);
   if (names.length === 0) return "other providers";
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} and ${names[1]}`;

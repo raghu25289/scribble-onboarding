@@ -44,6 +44,77 @@ const REVIEW_PLATFORM_FALLBACKS: { match: RegExp; platforms: string[] }[] = [
 ];
 const DEFAULT_REVIEW_PLATFORMS = ["Trustpilot", "Google Reviews"];
 
+// ─── Shared brand-anchored search corpus ────────────────────────────────────
+// Both "review platforms" and "independent mentions" used to be graded on
+// search results for the raw buyer questions (or, for reviews, a narrower
+// per-platform search) — the wrong signal, since a buyer question like "what
+// are the best budget Android phones" often returns generic listicles that
+// never mention the brand at all. Both pillars now share ONE brand-anchored
+// search pass instead.
+
+type AnchoredQuery = { query: string; kind: "brand" | "competitor" | "category" | "product" | "reddit" };
+
+function buildAnchoredQueries(domain: string, brand: BrandUnderstanding): AnchoredQuery[] {
+  const competitor = brand.topCompetitors?.[0];
+  const primaryProduct = brand.products?.[0]?.name;
+  const queries: AnchoredQuery[] = [
+    { query: `${domain} review`, kind: "brand" },
+    { query: `best ${brand.category} brands`, kind: "category" },
+    { query: `${domain} reddit`, kind: "reddit" },
+  ];
+  if (competitor) queries.push({ query: `${domain} vs ${competitor}`, kind: "competitor" });
+  if (primaryProduct) queries.push({ query: `${domain} ${primaryProduct} review`, kind: "product" });
+  return queries;
+}
+
+// Distinct external (non-brand-domain) hostnames found in a set of search
+// responses — a deterministic signal for "real third-party coverage exists"
+// that doesn't depend on the LLM scoring it correctly.
+function countExternalHostnames(domain: string, responses: SearchResponse[]): number {
+  const brandHost = domain.replace(/^www\./, "").toLowerCase();
+  const seen = new Set<string>();
+  for (const r of responses) {
+    for (const result of r.results) {
+      try {
+        const host = new URL(result.url).hostname.replace(/^www\./, "").toLowerCase();
+        if (host && !host.endsWith(brandHost)) seen.add(host);
+      } catch {
+        /* skip malformed URLs */
+      }
+    }
+  }
+  return seen.size;
+}
+
+export interface AnchoredSearchResult {
+  resultsText: string;
+  brandNameExternalCount: number; // external coverage from the "brand" + "reddit" queries specifically
+}
+
+export async function runAnchoredPillarSearches(
+  domain: string,
+  brand: BrandUnderstanding,
+  tracker?: CostTracker
+): Promise<AnchoredSearchResult> {
+  const queries = buildAnchoredQueries(domain, brand);
+  const responses = await Promise.all(queries.map((q) => searchWeb(q.query)));
+  if (tracker) {
+    for (let i = 0; i < responses.length; i++) tracker.add(TAVILY_ESTIMATED_COST_USD, "tavily");
+  }
+
+  const resultsText = queries
+    .map((q, i) => `--- "${q.query}" ---\n${resultsToText(responses[i])}`)
+    .join("\n\n");
+
+  const brandNameResponses = queries
+    .map((q, i) => ({ q, r: responses[i] }))
+    .filter(({ q }) => q.kind === "brand" || q.kind === "reddit")
+    .map(({ r }) => r);
+  const brandNameExternalCount = countExternalHostnames(domain, brandNameResponses);
+
+  return { resultsText, brandNameExternalCount };
+}
+
 export async function assessOnsite(args: {
   domain: string;
   baseUrl: string;
@@ -112,24 +183,19 @@ async function detectReviewPlatforms(brand: BrandUnderstanding, tracker?: CostTr
 export async function assessReviewSites(args: {
   domain: string;
   brand: BrandUnderstanding;
+  anchored: AnchoredSearchResult;
   tracker?: CostTracker;
 }): Promise<PillarScore> {
   try {
     const platforms = await detectReviewPlatforms(args.brand, args.tracker);
 
-    const searches = await Promise.all(
-      platforms.slice(0, 3).map((p) => searchWeb(`${args.domain} reviews ${p}`))
-    );
-    if (args.tracker) {
-      for (let i = 0; i < searches.length; i++) args.tracker.add(TAVILY_ESTIMATED_COST_USD, "tavily");
-    }
-    const resultsText = searches
-      .map((s, i) => `--- ${platforms[i]} ---\n${resultsToText(s)}`)
-      .join("\n\n");
-
     const out = await generateJson<{ score: number; gap: string }>({
       system: REVIEW_SCORING_SYSTEM,
-      prompt: reviewScoringPrompt({ domain: args.domain, platforms, resultsText }),
+      prompt: reviewScoringPrompt({
+        domain: args.domain,
+        platforms,
+        resultsText: args.anchored.resultsText,
+      }),
       schema: scoreSchema,
       tracker: args.tracker,
       costLabel: "pillar_reviews_score",
@@ -145,29 +211,35 @@ export async function assessReviewSites(args: {
   }
 }
 
-// Reuses the "web" engine's search results already gathered per query in
-// Part 1 — no new search calls, which is why this pillar has to run after
-// (or alongside the tail of) the query-visibility loop.
+// Independent Mentions is only ever as good as the search results it's
+// scored against. A brand-anchored floor here matters: a globally-reviewed
+// brand scoring 0 means the check is broken, not the brand.
+const THIRDPARTY_SCORE_FLOOR = 30;
+const THIRDPARTY_FLOOR_EXTERNAL_THRESHOLD = 3;
+
 export async function assessThirdParty(args: {
   domain: string;
   brandProduct: string;
-  webSearchResults: SearchResponse[];
+  anchored: AnchoredSearchResult;
   tracker?: CostTracker;
 }): Promise<PillarScore> {
   try {
-    const resultsText = args.webSearchResults.map((s) => resultsToText(s)).join("\n\n");
     const out = await generateJson<{ score: number; gap: string }>({
       system: THIRDPARTY_SCORING_SYSTEM,
       prompt: thirdPartyScoringPrompt({
         domain: args.domain,
         brandProduct: args.brandProduct,
-        resultsText,
+        resultsText: args.anchored.resultsText,
       }),
       schema: scoreSchema,
       tracker: args.tracker,
       costLabel: "pillar_thirdparty",
     });
-    return { id: "thirdparty", label: "Independent mentions", score: clampScore(out.score), gap: out.gap };
+    let score = clampScore(out.score);
+    if (args.anchored.brandNameExternalCount >= THIRDPARTY_FLOOR_EXTERNAL_THRESHOLD) {
+      score = Math.max(score, THIRDPARTY_SCORE_FLOOR);
+    }
+    return { id: "thirdparty", label: "Independent mentions", score, gap: out.gap };
   } catch (e) {
     return {
       id: "thirdparty",

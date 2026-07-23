@@ -27,6 +27,7 @@ export interface BrandUnderstanding {
   pricingSignals: string; // raw pricing evidence found (or inferred)
   pricingModel: string; // e.g. "subscription", "usage-based", "enterprise/sales-led", "unknown"
   products: BrandProduct[]; // distinct products/price-tiers found in the pricing evidence (at least one)
+  topCompetitors: string[]; // 1-2 well-known competitors, from general knowledge, independent of site content
 }
 
 // A distinct product or price-tier the brand sells, used to price individual
@@ -44,6 +45,15 @@ export interface VisibilityResult {
   winners: string[]; // who IS being recommended instead / who wins this query today
 }
 
+// A "winner" name the visibility judge extracted, cross-checked against the
+// actual source text it was given. verified = the engine's raw answer had at
+// least one citation URL backing it (an uncited claim is more likely to name
+// a product that doesn't really exist).
+export interface Winner {
+  name: string;
+  verified: boolean;
+}
+
 // ─── Multi-engine visibility (real engine attribution) ──────────────────────
 // "web" is the original Tavily-backed check, relabeled "Open web baseline" —
 // it's kept for context but excluded from engine chips and from all
@@ -56,7 +66,7 @@ export interface EngineCheckResult {
   ok: boolean; // false = the call failed or timed out ("Couldn't check"); visible/snippet/winners are meaningless when false
   visible: boolean;
   snippet: string;
-  winners: string[];
+  winners: Winner[]; // names dropped if not literally present in the source text — see checkEngineVisibility
   citations: string[];
   error?: string;
 }
