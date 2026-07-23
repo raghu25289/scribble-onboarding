@@ -1,10 +1,11 @@
 "use client";
 
-import { computeHeadlineScore, isQueryFullyChecked } from "@/lib/engineVisibility";
+import { aggregateQuery, computeHeadlineScore, isQueryFullyChecked } from "@/lib/engineVisibility";
 import type { BrandUnderstanding, QueryWithDemand, QueryVisibility } from "@/lib/types";
 import VisibilityRow from "./VisibilityRow";
 import VisibilityGauge from "./VisibilityGauge";
 import EngineGrid from "./EngineGrid";
+import EngineColumnHeaders from "./EngineColumnHeaders";
 
 interface Props {
   domain: string;
@@ -17,6 +18,17 @@ export default function ResultsScreen({ domain, brand, queries, visibility }: Pr
   const total = queries.length;
   const allDone = total > 0 && visibility.every(isQueryFullyChecked);
   const { visible: visibleChecks, total: totalChecks } = computeHeadlineScore(visibility);
+
+  // Fully-invisible cards sort first so the worst gaps are the first thing
+  // scanned; a stable sort keeps ties in their original order.
+  const rows = queries
+    .map((q, i) => ({
+      originalIndex: i,
+      query: q.text,
+      visibility: visibility[i] ?? { query: q.text, engines: {} },
+    }))
+    .map((row) => ({ ...row, agg: aggregateQuery(row.visibility) }))
+    .sort((a, b) => Number(!a.agg.invisible) - Number(!b.agg.invisible));
 
   return (
     <section className="fade-up">
@@ -48,12 +60,15 @@ export default function ResultsScreen({ domain, brand, queries, visibility }: Pr
       )}
 
       <div className="mt-5 space-y-3">
-        {queries.map((q, i) => (
+        {rows.length > 0 && <EngineColumnHeaders />}
+        {rows.map((row, displayIndex) => (
           <VisibilityRow
-            key={i}
-            index={i}
-            query={q.text}
-            visibility={visibility[i] ?? { query: q.text, engines: {} }}
+            key={row.originalIndex}
+            index={displayIndex}
+            query={row.query}
+            visibility={row.visibility}
+            domain={domain}
+            products={brand?.products ?? []}
           />
         ))}
       </div>

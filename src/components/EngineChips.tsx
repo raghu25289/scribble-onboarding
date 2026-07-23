@@ -3,48 +3,40 @@
 import { REAL_ENGINES } from "@/lib/engineVisibility";
 import type { EngineId, QueryVisibility } from "@/lib/types";
 
-const ENGINE_LABELS: Record<EngineId, string> = {
-  web: "Open web baseline",
-  perplexity: "Perplexity",
-  chatgpt: "ChatGPT",
-};
-
+// Renders just the fixed-width pill cells for one query row — no per-cell
+// engine label (those live once, above the list, in EngineColumnHeaders) —
+// so it must be placed directly inside a grid using QUERY_ROW_GRID_TEMPLATE.
 export default function EngineChips({ visibility }: { visibility: QueryVisibility }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {REAL_ENGINES.map((engine) => {
-        const result = visibility.engines[engine];
-        return <EngineChip key={engine} label={ENGINE_LABELS[engine]} result={result} />;
-      })}
-    </div>
+    <>
+      {REAL_ENGINES.map((engine) => (
+        <EnginePill key={engine} result={visibility.engines[engine]} />
+      ))}
+    </>
   );
 }
 
-function EngineChip({
-  label,
-  result,
-}: {
-  label: string;
-  result: QueryVisibility["engines"][EngineId];
-}) {
+function EnginePill({ result }: { result: QueryVisibility["engines"][EngineId] }) {
   if (!result) {
-    return (
-      <span className="skeleton inline-flex h-6 w-24 shrink-0 rounded-full" />
-    );
+    return <span className="skeleton mx-auto block h-6 w-9 rounded-full" />;
   }
   if (!result.ok) {
     return (
-      <span className="shrink-0 rounded-full border border-[var(--panel-line)] px-2.5 py-1 text-xs text-[var(--muted)]">
-        {label} · Couldn&apos;t check
+      <span
+        className="mx-auto flex h-6 w-9 items-center justify-center rounded-full border border-[var(--panel-line)] text-[10px] text-[var(--muted)]"
+        title="Couldn't check"
+      >
+        –
       </span>
     );
   }
   return (
     <span
-      className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold text-[var(--ink)]"
+      className="mx-auto flex h-6 w-9 items-center justify-center rounded-full text-xs font-bold text-[var(--ink)]"
       style={{ background: result.visible ? "var(--win)" : "var(--miss)" }}
+      title={result.visible ? "Visible" : "Invisible"}
     >
-      {label} · {result.visible ? "Visible" : "Invisible"}
+      {result.visible ? "✓" : "✕"}
     </span>
   );
 }
