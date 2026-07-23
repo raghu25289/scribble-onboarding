@@ -7,6 +7,7 @@ import {
   computeCostBreakdown,
   formatAnchorPrice,
   formatMoney,
+  round2SigFigs,
   tierLabel,
   truncateLabel,
 } from "@/lib/costEstimate";
@@ -19,11 +20,15 @@ interface Props {
   visibility: QueryVisibility[]; // resolved, same order as queries
 }
 
+// Share of each query's conservative loss framed as recoverable "with
+// Scribble" — illustrative, not a guarantee (see the projection-layer note).
+const RECOVERABLE_SHARE = 0.6;
+
 // A visual revenue/leads-loss infographic, built in plain SVG/CSS (no chart
 // library): a count-up headline number (the conservative estimate), then one
-// bar per invisible query sized proportional to its own loss estimate. Only
-// renders once every query's engines have resolved AND at least one query is
-// invisible.
+// bar per invisible query, longest = 100%, all scaled to the same
+// (conservative) figure. Only renders once every query's engines have
+// resolved AND at least one query is invisible.
 export default function CostCard({ brand, arpu, queries, visibility }: Props) {
   const [showMethod, setShowMethod] = useState(false);
   const ready = visibility.length === queries.length;
@@ -36,6 +41,9 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
 
   const leadsFirst = arpu.classification === "leads";
   const breakdown = computeCostBreakdown(rows, arpu);
+  // All bars are proportional to the same figure (conservative), longest =
+  // 100%, sorted descending so the biggest gap reads first.
+  const sortedRows = breakdown.rows.slice().sort((a, b) => b.lowUsd - a.lowUsd);
 
   // Hooks must run unconditionally on every render, so the count-up target is
   // computed above any early return below (an empty `rows` just yields 0).
@@ -45,10 +53,11 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
 
   if (!ready || rows.length === 0) return null;
 
-  const maxHigh = Math.max(...breakdown.rows.map((r) => r.highUsd), 1);
+  const maxLow = Math.max(...sortedRows.map((r) => r.lowUsd), 1);
   const lostLabel = arpu.isTransactionalConsumerSpend
     ? "estimated sales lost, per month"
     : "estimated revenue lost, per month";
+  const recoverableTotal = round2SigFigs(breakdown.totalLowUsd * RECOVERABLE_SHARE);
 
   return (
     <section
@@ -91,43 +100,69 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
       </div>
 
       <div className="mt-6 space-y-4">
-        {breakdown.rows.map((row, i) => {
-          const widthPct = Math.max(6, Math.round((row.highUsd / maxHigh) * 100));
+        {sortedRows.map((row, i) => {
+          const widthPct = Math.max(6, Math.round((row.lowUsd / maxLow) * 100));
+          const recoverablePct = widthPct * RECOVERABLE_SHARE;
           return (
             <div key={i}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="font-medium leading-snug">{truncateLabel(row.qv.query)}</span>
+                <span className="font-medium leading-snug">
+                  {truncateLabel(row.qv.query)}{" "}
+                  <span className="text-[11px] italic text-[var(--muted)]">{tierLabel(row.tier)}</span>
+                </span>
                 <span className="shrink-0 text-[var(--muted)]">
                   {leadsFirst
                     ? `${row.lowLeads.toLocaleString("en-US")}–${row.highLeads.toLocaleString("en-US")} leads/mo`
                     : `${formatMoney(row.lowUsd)}–${formatMoney(row.highUsd)}/mo`}
                 </span>
               </div>
-              <div className="mt-1.5 h-2.5 w-full rounded-full bg-[var(--ink-soft)]">
+              <div className="relative mt-1.5 h-2.5 w-full rounded-full bg-[var(--ink-soft)]">
                 <div
-                  className="h-2.5 rounded-full transition-[width]"
+                  className="absolute inset-y-0 left-0 rounded-full"
                   style={{ width: `${widthPct}%`, background: "var(--miss)" }}
                 />
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  style={{ width: `${recoverablePct}%`, background: "rgba(110,231,168,0.55)" }}
+                />
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs text-[var(--muted)]">
-                  {tierLabel(row.tier)}
-                </span>
-                {row.agg.winners.slice(0, 3).map((w, wi) => (
-                  <span
-                    key={wi}
-                    className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
-                  >
-                    {w}
-                  </span>
-                ))}
-              </div>
+              {row.agg.winners.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {row.agg.winners.slice(0, 3).map((w, wi) => (
+                    <span
+                      key={wi}
+                      className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
+                    >
+                      {w.name}
+                      {!w.verified && (
+                        <span className="ml-1 text-[9px] text-[var(--muted)]">unverified</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      <p className="mt-5 text-xs text-[var(--muted)]">
+      <div className="mt-4 flex items-center gap-4 text-xs text-[var(--muted)]">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--miss)" }} />
+          Lost today
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full" style={{ background: "rgba(110,231,168,0.7)" }} />
+          Recoverable
+        </span>
+      </div>
+
+      <p className="mt-4 text-sm font-medium" style={{ color: "var(--win)" }}>
+        Estimated {formatMoney(recoverableTotal)} per month recoverable. Illustrative, based on past
+        campaigns.
+      </p>
+
+      <p className="mt-3 text-xs text-[var(--muted)]">
         Estimates based on public search demand and your revenue model.
         Directional, not audited.
       </p>
