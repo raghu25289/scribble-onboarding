@@ -38,7 +38,7 @@ export default function CaptureForm({ onSubmit, disabled }: Props) {
       </h1>
       <p className="mt-4 text-[15px] leading-relaxed text-[var(--muted)]">
         Enter your site. Scribble finds the 5 questions your buyers ask AI
-        assistants, then shows you — live — whether you show up, and who wins
+        assistants, then shows you live whether you show up, and who wins
         those answers today.
       </p>
 

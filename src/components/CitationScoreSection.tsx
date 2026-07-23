@@ -1,12 +1,7 @@
 "use client";
 
 import type { PillarScore, PillarScores } from "@/lib/types";
-
-function bandColor(score: number): string {
-  if (score <= 40) return "var(--miss)";
-  if (score <= 70) return "var(--amber)";
-  return "var(--win)";
-}
+import { bandColor } from "@/lib/severity";
 
 export default function CitationScoreSection({ pillars }: { pillars: PillarScores }) {
   const rows: PillarScore[] = [pillars.onsite, pillars.reviews, pillars.thirdparty];
@@ -24,9 +19,8 @@ export default function CitationScoreSection({ pillars }: { pillars: PillarScore
       </div>
 
       <p className="mt-6 text-sm leading-relaxed text-[var(--muted)]">
-        AI engines decide who to cite from these three sources. Your site you
-        can fix yourself. The other two require independent voices talking
-        about you — that is what Scribble&apos;s creator network does.
+        Your site you can fix. Independent voices citing you is what
+        Scribble&apos;s creator network does.
       </p>
     </section>
   );

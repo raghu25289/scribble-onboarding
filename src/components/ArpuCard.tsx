@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ArpuVerdict, Classification } from "@/lib/types";
 
 const CLASSIFICATION_COPY: Record<
@@ -11,25 +12,26 @@ const CLASSIFICATION_COPY: Record<
     badgeColor: "var(--accent)",
     headline: "AI search is a lead channel for you.",
     subhead:
-      "At this price point, buyers research before they buy — they ask AI assistants \"best X for Y\" questions before choosing. Every citation you win here converts directly into inbound pipeline, and at this price, even 20 to 30 AI-sourced leads a month makes the math work.",
+      "Buyers research on AI before they buy. Every citation you win becomes pipeline you're not capturing today.",
   },
   brand: {
     badge: "Brand channel",
     badgeColor: "var(--win)",
     headline: "AI search is a brand channel for you.",
     subhead:
-      "Your revenue per customer means AI search works as a brand channel: the priority is being mentioned accurately and recommended in the right light everywhere buyers ask.",
+      "Your price point makes this about reputation, not leads: be accurate and recommended everywhere buyers ask.",
   },
   leads_low_volume: {
     badge: "Leads potential",
     badgeColor: "#f0b429",
     headline: "AI search is an early-mover opportunity for you.",
     subhead:
-      "The economics work at this price — but AI query demand in this category is still thin. The play is owning these questions early, before demand matures and competitors catch on.",
+      "The economics work here, but demand is still young. Own these questions now, before competitors catch on.",
   },
 };
 
 export default function ArpuCard({ arpu }: { arpu: ArpuVerdict }) {
+  const [showMethod, setShowMethod] = useState(false);
   const copy = CLASSIFICATION_COPY[arpu.classification];
 
   return (
@@ -54,10 +56,18 @@ export default function ArpuCard({ arpu }: { arpu: ArpuVerdict }) {
         {copy.subhead}
       </p>
 
-      <div className="mt-4 rounded-xl border border-[var(--panel-line)] bg-[var(--ink-soft)] p-4">
-        <div className="text-xs font-medium text-[var(--muted)]">How we estimated this</div>
-        <p className="mt-1.5 text-sm leading-relaxed">{arpu.reasoning}</p>
-      </div>
+      <button
+        type="button"
+        onClick={() => setShowMethod((v) => !v)}
+        className="mt-3 text-xs text-[var(--muted)] underline underline-offset-2"
+      >
+        {showMethod ? "Hide" : "How we calculated this"}
+      </button>
+      {showMethod && (
+        <div className="mt-2 rounded-xl border border-[var(--panel-line)] bg-[var(--ink-soft)] p-4">
+          <p className="text-sm leading-relaxed">{arpu.reasoning}</p>
+        </div>
+      )}
     </section>
   );
 }

@@ -40,10 +40,8 @@ export default function CtaCard({
   }, [showBooking, calLink]);
 
   const subhead = hasInvisible
-    ? `AI answers change weekly. Every week you are invisible, ${
-        topInvisibleCompetitor ?? "a competitor"
-      } compounds their lead. Our creator network took RocketX from 2% to 20% AI visibility in three months. Same playbook, applied to ${domain}.`
-    : "You are visible today. AI answers change weekly, and staying cited is the game.";
+    ? `AI changes weekly. ${topInvisibleCompetitor ?? "A competitor"} is winning these questions right now.`
+    : "You're visible today. Staying cited is the real game.";
 
   return (
     <section
@@ -95,11 +93,6 @@ export default function CtaCard({
       )}
 
       <AuditRequestCta domain={domain} score={score} />
-
-      <p className="mt-3 text-xs text-[var(--muted)]">
-        We saved your results. Whoever you talk to at Scribble will have this
-        exact report in front of them.
-      </p>
     </section>
   );
 }

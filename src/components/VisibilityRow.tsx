@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { aggregateQuery } from "@/lib/engineVisibility";
 import type { QueryVisibility } from "@/lib/types";
 import EngineChips from "./EngineChips";
@@ -10,10 +11,17 @@ interface Props {
   visibility: QueryVisibility;
 }
 
+// Keeps the expanded "Why" text to at most 2 sentences even if the model's
+// snippet ran long.
+function firstTwoSentences(text: string): string {
+  const parts = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+  return parts.slice(0, 2).join(" ");
+}
+
 export default function VisibilityRow({ index, query, visibility }: Props) {
+  const [showWhy, setShowWhy] = useState(false);
   const web = visibility.engines.web;
   const agg = aggregateQuery(visibility);
-  const webPending = web === undefined;
 
   return (
     <div
@@ -28,39 +36,39 @@ export default function VisibilityRow({ index, query, visibility }: Props) {
       </div>
 
       <div className="mt-3">
-        {webPending ? (
-          <div className="space-y-2">
-            <div className="skeleton h-3 w-4/5 rounded" />
-            <div className="skeleton h-3 w-3/5 rounded" />
-          </div>
-        ) : web.ok ? (
-          <>
-            <p className="text-xs font-medium text-[var(--muted)]">Open web baseline</p>
-            <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{web.snippet}</p>
-            {agg.winners.length > 0 && (
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-[var(--muted)]">Winning today:</span>
-                {agg.winners.map((w, i) => (
-                  <span
-                    key={i}
-                    className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
-                  >
-                    {w}
-                  </span>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <p className="text-sm leading-relaxed text-[var(--muted)]">
-            Open web baseline couldn&apos;t be checked for this question.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-3">
         <EngineChips visibility={visibility} />
       </div>
+
+      {agg.winners.length > 0 && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-[var(--muted)]">Winning today:</span>
+          {agg.winners.map((w, i) => (
+            <span
+              key={i}
+              className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
+            >
+              {w}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {web?.ok && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowWhy((v) => !v)}
+            className="mt-3 text-xs text-[var(--muted)] underline underline-offset-2"
+          >
+            {showWhy ? "Hide" : "Why"}
+          </button>
+          {showWhy && (
+            <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">
+              {firstTwoSentences(web.snippet)}
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
 }

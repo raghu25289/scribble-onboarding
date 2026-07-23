@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Scribble — See how AI answers about your brand",
+  title: "Scribble: See how AI answers about your brand",
   description:
     "Scribble shows whether AI assistants recommend your brand when buyers ask. Enter your site and see who wins your highest-intent queries today.",
 };
