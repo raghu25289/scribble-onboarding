@@ -1,14 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { aggregateQuery } from "@/lib/engineVisibility";
 import type { ArpuVerdict, QueryWithDemand, QueryVisibility } from "@/lib/types";
 import {
-  estimateQueryLeads,
-  estimateQueryLoss,
-  estimateTotalLeads,
-  estimateTotalLoss,
+  computeCostBreakdown,
   formatAnchorPrice,
   formatMoney,
+  tierLabel,
   truncateLabel,
 } from "@/lib/costEstimate";
 import { useCountUp } from "@/lib/useCountUp";
@@ -21,10 +20,12 @@ interface Props {
 }
 
 // A visual revenue/leads-loss infographic, built in plain SVG/CSS (no chart
-// library): a count-up headline number, then one bar per invisible query
-// sized proportional to its own loss estimate. Only renders once every
-// query's engines have resolved AND at least one query is invisible.
+// library): a count-up headline number (the conservative estimate), then one
+// bar per invisible query sized proportional to its own loss estimate. Only
+// renders once every query's engines have resolved AND at least one query is
+// invisible.
 export default function CostCard({ brand, arpu, queries, visibility }: Props) {
+  const [showMethod, setShowMethod] = useState(false);
   const ready = visibility.length === queries.length;
 
   const rows = ready
@@ -34,18 +35,20 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
     : [];
 
   const leadsFirst = arpu.classification === "leads";
-  const { lowUsd, highUsd } = estimateTotalLoss(rows, arpu);
-  const { lowLeads, highLeads } = estimateTotalLeads(rows);
+  const breakdown = computeCostBreakdown(rows, arpu);
 
   // Hooks must run unconditionally on every render, so the count-up target is
   // computed above any early return below (an empty `rows` just yields 0).
   const { value: countUpValue, ref: countUpRef } = useCountUp<HTMLDivElement>(
-    leadsFirst ? highLeads : highUsd
+    leadsFirst ? breakdown.totalLowLeads : breakdown.totalLowUsd
   );
 
   if (!ready || rows.length === 0) return null;
 
-  const maxHigh = Math.max(...rows.map((r) => estimateQueryLoss(r.demand, arpu).highUsd), 1);
+  const maxHigh = Math.max(...breakdown.rows.map((r) => r.highUsd), 1);
+  const lostLabel = arpu.isTransactionalConsumerSpend
+    ? "estimated sales lost, per month"
+    : "estimated revenue lost, per month";
 
   return (
     <section
@@ -71,36 +74,33 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
           {leadsFirst ? countUpValue.toLocaleString("en-US") : formatMoney(countUpValue)}
         </div>
         <div className="mt-1 text-sm text-[var(--muted)]">
-          {leadsFirst ? "estimated leads lost, per month" : "estimated revenue lost, per month"}
+          {leadsFirst ? "estimated leads lost, per month" : lostLabel}
         </div>
         <div className="mt-2 text-sm text-[var(--muted)]">
-          {leadsFirst ? (
-            <>
-              Conservative {lowLeads.toLocaleString("en-US")} to aggressive{" "}
-              {highLeads.toLocaleString("en-US")} leads/mo — worth {formatMoney(lowUsd)} to{" "}
-              {formatMoney(highUsd)} in pipeline at {formatAnchorPrice(arpu)}/{arpu.transactionNoun}.
-            </>
-          ) : (
-            <>
-              Conservative {formatMoney(lowUsd)} to aggressive {formatMoney(highUsd)} per month.
-            </>
-          )}
+          Could reach{" "}
+          {leadsFirst
+            ? `${breakdown.totalHighLeads.toLocaleString("en-US")} leads/mo`
+            : formatMoney(breakdown.totalHighUsd)}
+          .
         </div>
+        {breakdown.capped && (
+          <div className="mt-1 text-xs text-[var(--muted)]">
+            Conservatively capped to your estimated revenue scale.
+          </div>
+        )}
       </div>
 
       <div className="mt-6 space-y-4">
-        {rows.map(({ qv, demand, agg }, i) => {
-          const { lowUsd: qLow, highUsd: qHigh } = estimateQueryLoss(demand, arpu);
-          const { lowLeads: qLowLeads, highLeads: qHighLeads } = estimateQueryLeads(demand);
-          const widthPct = Math.max(6, Math.round((qHigh / maxHigh) * 100));
+        {breakdown.rows.map((row, i) => {
+          const widthPct = Math.max(6, Math.round((row.highUsd / maxHigh) * 100));
           return (
             <div key={i}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="font-medium leading-snug">{truncateLabel(qv.query)}</span>
+                <span className="font-medium leading-snug">{truncateLabel(row.qv.query)}</span>
                 <span className="shrink-0 text-[var(--muted)]">
                   {leadsFirst
-                    ? `${qLowLeads}–${qHighLeads} leads/mo`
-                    : `${formatMoney(qLow)}–${formatMoney(qHigh)}/mo`}
+                    ? `${row.lowLeads.toLocaleString("en-US")}–${row.highLeads.toLocaleString("en-US")} leads/mo`
+                    : `${formatMoney(row.lowUsd)}–${formatMoney(row.highUsd)}/mo`}
                 </span>
               </div>
               <div className="mt-1.5 h-2.5 w-full rounded-full bg-[var(--ink-soft)]">
@@ -109,19 +109,19 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
                   style={{ width: `${widthPct}%`, background: "var(--miss)" }}
                 />
               </div>
-              {agg.winners.length > 0 && (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-[var(--muted)]">Winning:</span>
-                  {agg.winners.slice(0, 3).map((w, wi) => (
-                    <span
-                      key={wi}
-                      className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
-                    >
-                      {w}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs text-[var(--muted)]">
+                  {tierLabel(row.tier)}
+                </span>
+                {row.agg.winners.slice(0, 3).map((w, wi) => (
+                  <span
+                    key={wi}
+                    className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
             </div>
           );
         })}
@@ -131,6 +131,24 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
         Estimates based on public search demand and your revenue model.
         Directional, not audited.
       </p>
+
+      <button
+        type="button"
+        onClick={() => setShowMethod((v) => !v)}
+        className="mt-3 text-xs text-[var(--muted)] underline underline-offset-2"
+      >
+        {showMethod ? "Hide" : "How we calculated this"}
+      </button>
+      {showMethod && (
+        <div className="mt-2 rounded-xl border border-[var(--panel-line)] bg-[var(--ink-soft)] p-4 text-xs leading-relaxed text-[var(--muted)]">
+          Each query gets a demand tier (niche to mass) with a fixed monthly
+          ask-volume band, priced against the specific product it&apos;s
+          about at {formatAnchorPrice(arpu)}/{arpu.transactionNoun} where no
+          product maps. A capture rate (0.5-5%, smaller for bigger categories)
+          converts demand into a realistic win rate. The total is capped to a
+          share of your estimated revenue so the number stays credible.
+        </div>
+      )}
     </section>
   );
 }

@@ -41,7 +41,11 @@ Analyze this and return:
 - audience: who specifically buys or uses this (role, company size, or consumer segment).
 - category: the market category a buyer would put this in (e.g. "customer support automation", "project management SaaS", "DTC skincare").
 - pricingSignals: the concrete pricing evidence you found (numbers, tiers, "contact sales", free trial), or your best inference if none is stated — and label it as inferred.
-- pricingModel: one of "subscription", "usage-based", "one-time", "enterprise/sales-led", "freemium", "marketplace/transaction", or "unknown".`;
+- pricingModel: one of "subscription", "usage-based", "one-time", "enterprise/sales-led", "freemium", "marketplace/transaction", or "unknown".
+- products: every distinct product or product line you can identify (not plan tiers of the same product — separate physical/SKU-level products, e.g. a phone line and an earbuds line are two products; a SaaS with only "Basic/Pro/Enterprise" tiers is one product). For each, give:
+    - name: a short recognizable name (e.g. "Phone (2a)", "Ear (earbuds)", "Pro plan").
+    - priceMonthlyUsd: its price, monthly-normalized (annual÷12, single-seat for per-seat, the one-time price itself for one-time purchases — do not divide one-time purchases by 12). If the pages don't state a price for a product, NEVER return 0 — infer a realistic figure from your own knowledge of the brand/category and typical pricing for that product line (e.g. you know roughly what a Nothing Phone or an iPhone costs even without a pricing page). Every product must have a real, positive price.
+  Return at least one entry. If the brand sells one product at one price, return exactly that single entry.`;
 }
 
 // ── 2. QUERY GENERATION  (CORE PROMPT) ───────────────────────────────────────
@@ -57,11 +61,18 @@ export function queryGenerationPrompt(input: {
   brandProduct: string;
   brandAudience: string;
   brandCategory: string;
+  brandProducts: { name: string; priceMonthlyUsd: number }[];
 }): string {
+  const productList = input.brandProducts
+    .map((p) => `- ${p.name}: $${p.priceMonthlyUsd}`)
+    .join("\n");
+
   return `Brand: ${input.domain}
 What it does: ${input.brandProduct}
 Who it's for: ${input.brandAudience}
 Category: ${input.brandCategory}
+Products this brand sells:
+${productList}
 
 Generate exactly ${config.queryCount} questions a real buyer would ask an AI assistant when they are actively evaluating a solution like this one — questions where ${input.domain} SHOULD be one of the recommended answers.
 
@@ -75,9 +86,20 @@ Rules:
 - Vary the angle across the ${config.queryCount} questions (category comparison, problem-first, use-case-specific, alternatives, buying criteria). Do not repeat the same question reworded.
 - Do NOT mention the brand name inside the question — these represent an unbiased buyer who does not yet know the brand.
 
-For each question, also estimate the monthly volume of buyers asking some version of it (across AI assistants and search, not just for this brand) — a plain gauge of how common the underlying need is for this category and audience. Give two integers: demandLow (a conservative monthly estimate) and demandHigh (an aggressive monthly estimate). When you're unsure, favor smaller, more defensible numbers over inflated ones.
+For each question, also classify:
 
-Return exactly ${config.queryCount} objects, each with: text (the question), demandLow (integer), demandHigh (integer).`;
+1. mappedProductName: which ONE product from the list above this specific question is actually about (e.g. an earbuds question maps to the earbuds product, not the phone). Use the exact name from the list. If the question is generic enough that no single product applies, return "" (empty string).
+
+2. demandTier: how common the underlying need is (across AI assistants and search generally, not just for this brand) — pick exactly one:
+   - "niche": specialist/B2B, narrow audience (e.g. "best contract lifecycle management for oil & gas subcontractors").
+   - "moderate": a defined category with buyers actively researching it, but not mainstream (e.g. "best help desk software for a 20-person e-commerce team").
+   - "high": a popular category with a broad audience (e.g. "best project management tool for startups").
+   - "mass": mainstream consumer territory, the kind of question millions of people ask (e.g. "best wireless earbuds").
+   Do NOT invent a volume number — just pick the tier.
+
+3. tierJustification: one short line justifying the tier pick (e.g. "Niche - only relevant to teams running regulated supply chains.").
+
+Return exactly ${config.queryCount} objects, each with: text (the question), mappedProductName (string), demandTier ("niche" | "moderate" | "high" | "mass"), tierJustification (one line).`;
 }
 
 // ── 3. VISIBILITY JUDGE ──────────────────────────────────────────────────────
@@ -155,6 +177,8 @@ Work through this in order:
    - Else if demandLevel is "near_zero": classification = "leads_low_volume".
    - Else: classification = "leads".
 
+6. Estimate plausibleMonthlyRevenueUsd: a rough, order-of-magnitude estimate of this brand's TOTAL monthly revenue across its whole business (not per customer). If you recognize the company, use your general knowledge of its scale. If not, infer from the category, pricing, and any scale signals in the evidence (funding, "trusted by X companies", team size, press mentions). This is a sanity-check figure used only to cap a downstream estimate — a defensible order of magnitude is fine, precision is not expected.
+
 Return:
 - classification: "leads" | "brand" | "leads_low_volume", per the rule above.
 - anchorPriceMonthlyUsd: the normalized monthly anchor price, in USD, as a plain number (e.g. 99, not "$99" or "99/mo").
@@ -163,7 +187,8 @@ Return:
 - demandLevel: "high" | "medium" | "near_zero", per step 4.
 - estimate: a short human-readable figure with its unit and what it's anchored on (e.g. "$99/mo (Pro tier)", "$12k/yr → $1k/mo (Enterprise, annualized)", "~$15/booking (assumed transactional)").
 - reasoning: 2-4 sentences showing how you got there — the price you found, why you picked that basis, the transactional-spend and demand calls, and any assumptions made. This is shown directly to the user, so make it credible and specific.
-- transactionNoun: the singular unit this revenue recurs per, matching the business (e.g. "month" for subscriptions, "booking" for travel/consumer transactions, "deal" for enterprise/sales-led, "purchase" for one-time).`;
+- transactionNoun: the singular unit this revenue recurs per, matching the business (e.g. "month" for subscriptions, "booking" for travel/consumer transactions, "deal" for enterprise/sales-led, "purchase" for one-time).
+- plausibleMonthlyRevenueUsd: the whole-company monthly revenue estimate from step 6, as a plain number in USD (e.g. 500000, not "$500k").`;
 }
 
 // ── 5. THREE-PILLAR CITATION SCORE  ("Why AI doesn't cite you") ─────────────

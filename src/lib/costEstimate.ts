@@ -1,15 +1,65 @@
 // Pure helpers that turn invisibility into a dollar estimate, using the query
-// demand and ARPU ranges the LLM calls in analyze.ts already computed. No
-// extra API calls here — just formatting and the capture-rate math.
+// demand tier and product-price mapping analyze.ts already computed. No
+// external keyword APIs, no LLM-guessed volumes — the tier bands and capture
+// rates below are fixed constants; the only judgment call the model makes is
+// which tier a query belongs to and which product it prices against.
 
-import type { ArpuVerdict, QueryWithDemand } from "./types";
+import type { ArpuVerdict, DemandTier, QueryWithDemand } from "./types";
 
 export const CURRENCY_SYMBOL = "$";
 
-// Assumed share of monthly demand a brand could realistically capture by
-// showing up in AI answers — deliberately conservative, deliberately a range.
-const CAPTURE_RATE_LOW = 0.02;
-const CAPTURE_RATE_HIGH = 0.05;
+// Fixed monthly AI-ask bands per tier. Conservative volume = band low;
+// aggressive volume = band midpoint (deliberately not band high).
+const DEMAND_BANDS: Record<DemandTier, { low: number; high: number }> = {
+  niche: { low: 50, high: 300 },
+  moderate: { low: 300, high: 1500 },
+  high: { low: 1500, high: 6000 },
+  mass: { low: 6000, high: 20000 },
+};
+
+function tierMidpoint(tier: DemandTier): number {
+  const band = DEMAND_BANDS[tier];
+  return (band.low + band.high) / 2;
+}
+
+// Capture rate keyed to the band's midpoint, not a flat global rate — the
+// more mainstream the demand, the smaller a slice of it any one brand can
+// realistically capture by showing up in AI answers.
+function captureRate(mid: number): { low: number; high: number } {
+  if (mid < 1000) return { low: 0.02, high: 0.05 };
+  if (mid <= 10000) return { low: 0.01, high: 0.02 };
+  return { low: 0.005, high: 0.01 };
+}
+
+const TIER_LABELS: Record<DemandTier, string> = {
+  niche: "Niche demand",
+  moderate: "Moderate demand",
+  high: "High demand",
+  mass: "Mass demand",
+};
+
+export function tierLabel(tier: DemandTier): string {
+  return TIER_LABELS[tier];
+}
+
+// Guardrail caps: the %-of-revenue cap alone is toothless for a large brand
+// (5% of $50M+ is millions), so a hard dollar ceiling backstops it — the
+// smaller of the two always wins. The aggressive ("could reach") figure gets
+// its own, more generous, independent cap so it can't balloon to a multiple
+// of a conservative number that's already at its ceiling.
+const CONSERVATIVE_CAP_REVENUE_SHARE = 0.05;
+const CONSERVATIVE_HARD_CAP_USD = 40_000;
+const AGGRESSIVE_CAP_REVENUE_SHARE = 0.15;
+const AGGRESSIVE_HARD_CAP_USD = 120_000;
+
+// Rounds to 2 significant digits: 12,345 -> 12,000; 87 -> 87; 8.7 -> 8.7.
+export function round2SigFigs(n: number): number {
+  if (!Number.isFinite(n) || n === 0) return 0;
+  const sign = n < 0 ? -1 : 1;
+  const abs = Math.abs(n);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(abs)) - 1);
+  return sign * Math.round(abs / magnitude) * magnitude;
+}
 
 export function formatMoney(n: number): string {
   return `${CURRENCY_SYMBOL}${Math.round(n).toLocaleString("en-US")}`;
@@ -20,59 +70,101 @@ export function formatAnchorPrice(arpu: ArpuVerdict): string {
   return formatMoney(arpu.anchorPriceMonthlyUsd);
 }
 
-// Rounds to avoid false precision: nearest 10 under $1,000, nearest 100 under
-// $10,000, nearest 500 above that.
-function roundEstimate(n: number): number {
-  if (n < 1000) return Math.round(n / 10) * 10;
-  if (n < 10000) return Math.round(n / 100) * 100;
-  return Math.round(n / 500) * 500;
+interface RawEstimate {
+  lowUsd: number;
+  highUsd: number;
+  lowLeads: number;
+  highLeads: number;
 }
 
-export function estimateQueryLoss(
-  demand: QueryWithDemand,
+function estimateQueryRaw(demand: QueryWithDemand, arpu: ArpuVerdict): RawEstimate {
+  const band = DEMAND_BANDS[demand.demandTier];
+  const mid = tierMidpoint(demand.demandTier);
+  const capture = captureRate(mid);
+  const price = demand.mappedPriceMonthlyUsd ?? arpu.anchorPriceMonthlyUsd;
+
+  const lowLeads = band.low * capture.low;
+  const highLeads = mid * capture.high;
+
+  return {
+    lowUsd: lowLeads * price,
+    highUsd: highLeads * price,
+    lowLeads,
+    highLeads,
+  };
+}
+
+export interface CostRow {
+  lowUsd: number;
+  highUsd: number;
+  lowLeads: number;
+  highLeads: number;
+  tier: DemandTier;
+}
+
+export interface CostBreakdown<T> {
+  rows: (T & CostRow)[];
+  totalLowUsd: number;
+  totalHighUsd: number;
+  totalLowLeads: number;
+  totalHighLeads: number;
+  capped: boolean;
+}
+
+// Single pass over every invisible query's rows: computes each row's raw
+// estimate, sums them, applies the revenue-based guardrail caps as ONE
+// proportional scale factor across every row (dollars and leads alike) so the
+// headline, the secondary line, and the bars all stay mutually consistent.
+export function computeCostBreakdown<T extends { demand: QueryWithDemand }>(
+  rows: T[],
   arpu: ArpuVerdict
-): { lowUsd: number; highUsd: number } {
-  const price = arpu.anchorPriceMonthlyUsd;
-  const lowUsd = roundEstimate(demand.demandLow * CAPTURE_RATE_LOW * price);
-  const highUsd = roundEstimate(demand.demandHigh * CAPTURE_RATE_HIGH * price);
-  return { lowUsd, highUsd: Math.max(highUsd, lowUsd) };
-}
+): CostBreakdown<T> {
+  const raw = rows.map((r) => estimateQueryRaw(r.demand, arpu));
+  const rawTotalLow = raw.reduce((sum, r) => sum + r.lowUsd, 0);
+  const rawTotalHigh = raw.reduce((sum, r) => sum + r.highUsd, 0);
 
-// Leads lost per month, independent of price — the capture-rate share of
-// query demand a brand could realistically win by showing up in AI answers.
-export function estimateQueryLeads(
-  demand: QueryWithDemand
-): { lowLeads: number; highLeads: number } {
-  const lowLeads = Math.round(demand.demandLow * CAPTURE_RATE_LOW);
-  const highLeads = Math.round(demand.demandHigh * CAPTURE_RATE_HIGH);
-  return { lowLeads, highLeads: Math.max(highLeads, lowLeads) };
-}
-
-// Sums the per-query loss/leads estimates across every invisible query, for
-// the revenue-loss infographic's headline number.
-export function estimateTotalLoss(
-  rows: { demand: QueryWithDemand }[],
-  arpu: ArpuVerdict
-): { lowUsd: number; highUsd: number } {
-  return rows.reduce(
-    (acc, { demand }) => {
-      const { lowUsd, highUsd } = estimateQueryLoss(demand, arpu);
-      return { lowUsd: acc.lowUsd + lowUsd, highUsd: acc.highUsd + highUsd };
-    },
-    { lowUsd: 0, highUsd: 0 }
+  const conservativeCap = Math.min(
+    CONSERVATIVE_CAP_REVENUE_SHARE * arpu.plausibleMonthlyRevenueUsd,
+    CONSERVATIVE_HARD_CAP_USD
   );
-}
-
-export function estimateTotalLeads(
-  rows: { demand: QueryWithDemand }[]
-): { lowLeads: number; highLeads: number } {
-  return rows.reduce(
-    (acc, { demand }) => {
-      const { lowLeads, highLeads } = estimateQueryLeads(demand);
-      return { lowLeads: acc.lowLeads + lowLeads, highLeads: acc.highLeads + highLeads };
-    },
-    { lowLeads: 0, highLeads: 0 }
+  const aggressiveCap = Math.min(
+    AGGRESSIVE_CAP_REVENUE_SHARE * arpu.plausibleMonthlyRevenueUsd,
+    AGGRESSIVE_HARD_CAP_USD
   );
+
+  let factor = 1;
+  if (rawTotalLow > 0) factor = Math.min(factor, conservativeCap / rawTotalLow);
+  if (rawTotalHigh > 0) factor = Math.min(factor, aggressiveCap / rawTotalHigh);
+  factor = Math.max(0, factor);
+  const capped = factor < 1;
+
+  const scaledRows = rows.map((r, i) => {
+    const lowUsd = round2SigFigs(raw[i].lowUsd * factor);
+    const highUsd = round2SigFigs(Math.max(raw[i].highUsd * factor, lowUsd));
+    const lowLeads = round2SigFigs(raw[i].lowLeads * factor);
+    const highLeads = round2SigFigs(Math.max(raw[i].highLeads * factor, lowLeads));
+    return { ...r, lowUsd, highUsd, lowLeads, highLeads, tier: r.demand.demandTier };
+  });
+
+  const totalLowUsd = scaledRows.reduce((sum, r) => sum + r.lowUsd, 0);
+  const totalHighUsd = Math.max(
+    scaledRows.reduce((sum, r) => sum + r.highUsd, 0),
+    totalLowUsd
+  );
+  const totalLowLeads = scaledRows.reduce((sum, r) => sum + r.lowLeads, 0);
+  const totalHighLeads = Math.max(
+    scaledRows.reduce((sum, r) => sum + r.highLeads, 0),
+    totalLowLeads
+  );
+
+  return {
+    rows: scaledRows,
+    totalLowUsd: round2SigFigs(totalLowUsd),
+    totalHighUsd: round2SigFigs(totalHighUsd),
+    totalLowLeads: round2SigFigs(totalLowLeads),
+    totalHighLeads: round2SigFigs(totalHighLeads),
+    capped,
+  };
 }
 
 // Shortens a query for the infographic's per-bar label.

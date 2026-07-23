@@ -26,6 +26,15 @@ export interface BrandUnderstanding {
   category: string; // market category
   pricingSignals: string; // raw pricing evidence found (or inferred)
   pricingModel: string; // e.g. "subscription", "usage-based", "enterprise/sales-led", "unknown"
+  products: BrandProduct[]; // distinct products/price-tiers found in the pricing evidence (at least one)
+}
+
+// A distinct product or price-tier the brand sells, used to price individual
+// queries against the specific product they're actually about (an "earbuds
+// under $100" query prices against the earbuds, not the phone).
+export interface BrandProduct {
+  name: string;
+  priceMonthlyUsd: number; // monthly-normalized, same conventions as ArpuVerdict.anchorPriceMonthlyUsd
 }
 
 export interface VisibilityResult {
@@ -73,12 +82,19 @@ export interface PillarScores {
   thirdparty: PillarScore;
 }
 
-// A generated query plus its estimated monthly buyer-demand range. The demand
-// range feeds the "cost of invisibility" estimate on the results page.
+// Fixed monthly AI-ask demand bands (no external keyword APIs) — the LLM
+// only picks the tier + justifies it; the actual volume numbers live in code
+// (see DEMAND_BANDS in costEstimate.ts) so they can't be inflated.
+export type DemandTier = "niche" | "moderate" | "high" | "mass";
+
+// A generated query plus its demand tier and which of the brand's products it
+// prices against. Feeds the "cost of invisibility" estimate on the results page.
 export interface QueryWithDemand {
   text: string;
-  demandLow: number; // conservative monthly ask-volume estimate
-  demandHigh: number; // aggressive monthly ask-volume estimate
+  demandTier: DemandTier;
+  tierJustification: string; // one line: why this tier
+  mappedProductName: string; // "" when no specific product maps
+  mappedPriceMonthlyUsd: number | null; // looked up from BrandProduct in code; null falls back to arpu.anchorPriceMonthlyUsd
 }
 
 export type Classification = "leads" | "brand" | "leads_low_volume";
@@ -100,6 +116,7 @@ export interface ArpuVerdict {
   estimate: string; // human-readable figure, e.g. "$99/mo (Pro tier)"
   reasoning: string; // exposed reasoning, shown in the "How we estimated this" card
   transactionNoun: string; // the unit revenue recurs per, e.g. "month", "booking", "deal"
+  plausibleMonthlyRevenueUsd: number; // model's rough estimate of the brand's whole-company monthly revenue, used only to cap the loss estimate
 }
 
 // A completed onboarding record — this is what gets logged for lead review.

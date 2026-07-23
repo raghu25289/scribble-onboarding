@@ -15,7 +15,6 @@ import { fetchSiteContent } from "./scrape";
 import { checkEngineVisibility, fetchWebSearch } from "./engines";
 import type { SearchResponse } from "./search";
 import { store, makeId } from "./store";
-import { getAhrefsVolume } from "./ahrefs";
 import { deriveClassification } from "./classification";
 import { assessOnsite, assessReviewSites, assessThirdParty } from "./pillars";
 import {
@@ -28,9 +27,11 @@ import {
 } from "./prompts";
 import type {
   AnalyzeEvent,
+  BrandProduct,
   BrandUnderstanding,
   Classification,
   DemandLevel,
+  DemandTier,
   EngineId,
   Lead,
   OnboardingRecord,
@@ -53,8 +54,20 @@ const brandSchema = {
     category: { type: "string" },
     pricingSignals: { type: "string" },
     pricingModel: { type: "string" },
+    products: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string" },
+          priceMonthlyUsd: { type: "number" },
+        },
+        required: ["name", "priceMonthlyUsd"],
+      },
+    },
   },
-  required: ["product", "audience", "category", "pricingSignals", "pricingModel"],
+  required: ["product", "audience", "category", "pricingSignals", "pricingModel", "products"],
 };
 
 const queriesSchema = {
@@ -68,10 +81,11 @@ const queriesSchema = {
         additionalProperties: false,
         properties: {
           text: { type: "string" },
-          demandLow: { type: "integer" },
-          demandHigh: { type: "integer" },
+          mappedProductName: { type: "string" },
+          demandTier: { type: "string", enum: ["niche", "moderate", "high", "mass"] },
+          tierJustification: { type: "string" },
         },
-        required: ["text", "demandLow", "demandHigh"],
+        required: ["text", "mappedProductName", "demandTier", "tierJustification"],
       },
     },
   },
@@ -93,6 +107,7 @@ const arpuSchema = {
     estimate: { type: "string" },
     reasoning: { type: "string" },
     transactionNoun: { type: "string" },
+    plausibleMonthlyRevenueUsd: { type: "number" },
   },
   required: [
     "classification",
@@ -103,6 +118,7 @@ const arpuSchema = {
     "estimate",
     "reasoning",
     "transactionNoun",
+    "plausibleMonthlyRevenueUsd",
   ],
 };
 
@@ -160,6 +176,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
       category: "Unknown",
       pricingSignals: "No pricing evidence available.",
       pricingModel: "unknown",
+      products: [],
     };
   }
   record.brand = brand;
@@ -169,29 +186,46 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   emit({ type: "status", step: "generate_queries", message: "Generating the 5 questions buyers ask AI about this…" });
   let queries: QueryWithDemand[] = [];
   try {
-    const out = await generateJson<{ queries: QueryWithDemand[] }>({
+    type RawQuery = {
+      text: string;
+      mappedProductName: string;
+      demandTier: DemandTier;
+      tierJustification: string;
+    };
+    const out = await generateJson<{ queries: RawQuery[] }>({
       system: QUERY_GENERATION_SYSTEM,
       prompt: queryGenerationPrompt({
         domain: lead.domain,
         brandProduct: brand.product,
         brandAudience: brand.audience,
         brandCategory: brand.category,
+        brandProducts: brand.products,
       }),
       schema: queriesSchema,
       tracker,
       costLabel: "query_generation",
     });
-    queries = (out.queries || []).slice(0, config.queryCount);
 
-    // Prefer real Ahrefs keyword volume over the model's estimate when it's
-    // available; otherwise the model's demandLow/demandHigh stand as-is.
-    for (const q of queries) {
-      const ahrefs = await getAhrefsVolume(q.text);
-      if (ahrefs) {
-        q.demandLow = ahrefs.low;
-        q.demandHigh = ahrefs.high;
-      }
-    }
+    // The model names a product; code supplies its price, so there's a
+    // single source of truth for numbers (the brand's own products list)
+    // instead of asking the model to restate a price it could get wrong.
+    const findProductPrice = (name: string): number | null => {
+      const match = brand.products.find(
+        (p: BrandProduct) => p.name.trim().toLowerCase() === name.trim().toLowerCase()
+      );
+      // A non-positive price isn't a real price (the model failed to infer
+      // one) — treat it the same as "no product mapped" and fall back to the
+      // brand anchor rather than pricing the query at $0.
+      return match && match.priceMonthlyUsd > 0 ? match.priceMonthlyUsd : null;
+    };
+
+    queries = (out.queries || []).slice(0, config.queryCount).map((q) => ({
+      text: q.text,
+      demandTier: q.demandTier,
+      tierJustification: q.tierJustification,
+      mappedProductName: q.mappedProductName,
+      mappedPriceMonthlyUsd: q.mappedProductName ? findProductPrice(q.mappedProductName) : null,
+    }));
   } catch (e) {
     emit({
       type: "error",
@@ -277,6 +311,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         estimate: string;
         reasoning: string;
         transactionNoun: string;
+        plausibleMonthlyRevenueUsd: number;
       }>({
         system: ARPU_CLASSIFICATION_SYSTEM,
         prompt: arpuClassificationPrompt({
@@ -309,6 +344,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         estimate: out.estimate,
         reasoning: out.reasoning,
         transactionNoun: out.transactionNoun,
+        plausibleMonthlyRevenueUsd: out.plausibleMonthlyRevenueUsd,
       };
       emit({ type: "arpu", data: verdict });
       return verdict;
