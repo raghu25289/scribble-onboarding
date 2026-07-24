@@ -28,11 +28,29 @@ const CLASSIFICATION_COPY: Record<
     subhead:
       "The economics work here, but demand is still young. Own these questions now, before competitors catch on.",
   },
+  unknown_pricing: {
+    badge: "Pricing unknown",
+    badgeColor: "var(--panel-line)",
+    headline: "Pricing not detectable from your site.",
+    subhead:
+      "AI assistants hit the same wall. If we can't read your pricing, neither can they.",
+  },
+};
+
+const CONFIDENCE_LABEL: Record<Exclude<ArpuVerdict["priceConfidence"], undefined>, string> = {
+  found_on_site: "",
+  search_derived: "from a web search, not your site",
+  assumed: "assumed, not directly stated",
 };
 
 export default function ArpuCard({ arpu }: { arpu: ArpuVerdict }) {
   const [showMethod, setShowMethod] = useState(false);
   const copy = CLASSIFICATION_COPY[arpu.classification];
+  const pricingUnknown = arpu.classification === "unknown_pricing";
+  const confidenceNote =
+    arpu.priceConfidence && arpu.priceConfidence !== "found_on_site"
+      ? CONFIDENCE_LABEL[arpu.priceConfidence]
+      : null;
 
   return (
     <section className="fade-up rounded-2xl border border-[var(--panel-line)] bg-[var(--panel)] p-6">
@@ -43,9 +61,14 @@ export default function ArpuCard({ arpu }: { arpu: ArpuVerdict }) {
         >
           {copy.badge}
         </span>
-        <span className="text-xs text-[var(--muted)]">
-          Estimated ARPU: {arpu.estimate}
-        </span>
+        {!pricingUnknown && (
+          <span className="text-xs text-[var(--muted)]">
+            Estimated ARPU: {arpu.estimate}
+            {confidenceNote && (
+              <span className="ml-1 italic text-[var(--muted)] opacity-70">({confidenceNote})</span>
+            )}
+          </span>
+        )}
       </div>
 
       <h3 className="mt-3 font-display text-xl font-semibold sm:text-2xl">

@@ -33,6 +33,10 @@ export function createCostTracker(): CostTracker {
 // their published per-search pricing tiers, not a metered figure.
 export const TAVILY_ESTIMATED_COST_USD = 0.008;
 
+// Tavily Extract at advanced depth costs roughly 2x a basic search in
+// published credit terms — also a rough placeholder, not metered.
+export const TAVILY_EXTRACT_ESTIMATED_COST_USD = 0.016;
+
 export function formatCostBreakdown(tracker: CostTracker): string {
   const byLabel = new Map<string, number>();
   for (const e of tracker.breakdown()) {

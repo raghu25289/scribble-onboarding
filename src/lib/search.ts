@@ -98,6 +98,41 @@ const serper: SearchProvider = async (query) => {
 
 const PROVIDERS: Record<string, SearchProvider> = { tavily, serper };
 
+// ── Tavily Extract ──────────────────────────────────────────────────────────
+// Reads one specific URL's actual rendered content — unlike a raw fetch, it
+// handles client-rendered (JS) pages. Used as a fallback when a raw fetch of
+// a page comes back as an empty shell. Tavily-specific (no serper
+// equivalent), so this bypasses the searchProvider config and checks the
+// Tavily key directly.
+export async function extractWithTavily(url: string): Promise<string | null> {
+  if (!process.env.TAVILY_API_KEY) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.siteFetchTimeoutMs);
+  try {
+    const res = await fetch("https://api.tavily.com/extract", {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        urls: [url],
+        extract_depth: "advanced",
+      }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      results?: { url?: string; raw_content?: string }[];
+    };
+    const raw = data.results?.[0]?.raw_content;
+    if (!raw) return null;
+    return raw.replace(/\s+/g, " ").trim();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function searchWeb(query: string): Promise<SearchResponse> {
   if (!hasSearchKey()) {
     return {

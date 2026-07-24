@@ -39,11 +39,18 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
         .filter((row) => row.agg.invisible)
     : [];
 
-  const leadsFirst = arpu.classification === "leads";
+  // No pricing signal exists at all — the cost card can't convert demand into
+  // dollars honestly, so it drops to a leads-only framing with zero $ figures
+  // anywhere (headline, bars, and the recoverable line all follow this).
+  const pricingUnknown = arpu.classification === "unknown_pricing";
+  const leadsFirst = arpu.classification === "leads" || pricingUnknown;
   const breakdown = computeCostBreakdown(rows, arpu);
-  // All bars are proportional to the same figure (conservative), longest =
-  // 100%, sorted descending so the biggest gap reads first.
-  const sortedRows = breakdown.rows.slice().sort((a, b) => b.lowUsd - a.lowUsd);
+  // Bars are proportional to whichever figure is actually being shown
+  // (leads when pricing is unknown — the $ side is meaningless there since
+  // price defaults to 0 — dollars otherwise), longest = 100%, sorted
+  // descending so the biggest gap reads first.
+  const barValue = (r: (typeof breakdown.rows)[number]) => (pricingUnknown ? r.lowLeads : r.lowUsd);
+  const sortedRows = breakdown.rows.slice().sort((a, b) => barValue(b) - barValue(a));
 
   // Hooks must run unconditionally on every render, so the count-up target is
   // computed above any early return below (an empty `rows` just yields 0).
@@ -53,11 +60,12 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
 
   if (!ready || rows.length === 0) return null;
 
-  const maxLow = Math.max(...sortedRows.map((r) => r.lowUsd), 1);
+  const maxLow = Math.max(...sortedRows.map(barValue), 1);
   const lostLabel = arpu.isTransactionalConsumerSpend
     ? "estimated sales lost, per month"
     : "estimated revenue lost, per month";
   const recoverableTotal = round2SigFigs(breakdown.totalLowUsd * RECOVERABLE_SHARE);
+  const recoverableLeads = round2SigFigs(breakdown.totalLowLeads * RECOVERABLE_SHARE);
 
   return (
     <section
@@ -101,7 +109,7 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
 
       <div className="mt-6 space-y-4">
         {sortedRows.map((row, i) => {
-          const widthPct = Math.max(6, Math.round((row.lowUsd / maxLow) * 100));
+          const widthPct = Math.max(6, Math.round((barValue(row) / maxLow) * 100));
           const recoverablePct = widthPct * RECOVERABLE_SHARE;
           return (
             <div key={i}>
@@ -158,13 +166,15 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
       </div>
 
       <p className="mt-4 text-sm font-medium" style={{ color: "var(--win)" }}>
-        Estimated {formatMoney(recoverableTotal)} per month recoverable. Illustrative, based on past
-        campaigns.
+        {pricingUnknown
+          ? `Estimated ${recoverableLeads.toLocaleString("en-US")} leads/mo recoverable. Illustrative, based on past campaigns.`
+          : `Estimated ${formatMoney(recoverableTotal)} per month recoverable. Illustrative, based on past campaigns.`}
       </p>
 
       <p className="mt-3 text-xs text-[var(--muted)]">
-        Estimates based on public search demand and your revenue model.
-        Directional, not audited.
+        {pricingUnknown
+          ? "Estimates based on public search demand. We couldn't verify your pricing, so this is shown in leads, not dollars. Directional, not audited."
+          : "Estimates based on public search demand and your revenue model. Directional, not audited."}
       </p>
 
       <button
@@ -176,12 +186,26 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
       </button>
       {showMethod && (
         <div className="mt-2 rounded-xl border border-[var(--panel-line)] bg-[var(--ink-soft)] p-4 text-xs leading-relaxed text-[var(--muted)]">
-          Each query gets a demand tier (niche to mass) with a fixed monthly
-          ask-volume band, priced against the specific product it&apos;s
-          about at {formatAnchorPrice(arpu)}/{arpu.transactionNoun} where no
-          product maps. A capture rate (0.5-5%, smaller for bigger categories)
-          converts demand into a realistic win rate. The total is capped to a
-          share of your estimated revenue so the number stays credible.
+          {pricingUnknown ? (
+            <>
+              Each query gets a demand tier (niche to mass) with a fixed
+              monthly ask-volume band. A capture rate (0.5-5%, smaller for
+              bigger categories) converts demand into a realistic win rate,
+              shown here as leads rather than dollars — we couldn&apos;t find
+              your pricing anywhere, so converting that to a revenue figure
+              would just be a guess dressed up as a number.
+            </>
+          ) : (
+            <>
+              Each query gets a demand tier (niche to mass) with a fixed
+              monthly ask-volume band, priced against the specific product
+              it&apos;s about at {formatAnchorPrice(arpu)}/{arpu.transactionNoun}{" "}
+              where no product maps. A capture rate (0.5-5%, smaller for
+              bigger categories) converts demand into a realistic win rate.
+              The total is capped to a share of your estimated revenue so the
+              number stays credible.
+            </>
+          )}
         </div>
       )}
     </section>

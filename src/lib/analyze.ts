@@ -14,7 +14,7 @@ import { generateJson } from "./openrouter";
 import { fetchSiteContent } from "./scrape";
 import { checkEngineVisibility, fetchWebSearch } from "./engines";
 import { store, makeId } from "./store";
-import { deriveClassification } from "./classification";
+import { deriveClassification, resolvePriceConfidence } from "./classification";
 import { assessOnsite, assessReviewSites, assessThirdParty, runAnchoredPillarSearches } from "./pillars";
 import {
   BRAND_UNDERSTANDING_SYSTEM,
@@ -102,6 +102,10 @@ const arpuSchema = {
       type: "string",
       enum: ["listed", "annualized", "per_seat", "enterprise_assumed"],
     },
+    priceConfidence: {
+      type: "string",
+      enum: ["found_on_site", "search_derived", "assumed"],
+    },
     isTransactionalConsumerSpend: { type: "boolean" },
     demandLevel: { type: "string", enum: ["high", "medium", "near_zero"] },
     estimate: { type: "string" },
@@ -113,6 +117,7 @@ const arpuSchema = {
     "classification",
     "anchorPriceMonthlyUsd",
     "priceBasis",
+    "priceConfidence",
     "isTransactionalConsumerSpend",
     "demandLevel",
     "estimate",
@@ -141,7 +146,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   // ── Step 2a: fetch the site ────────────────────────────────────────────────
   emit({ type: "status", step: "fetch_site", message: `Fetching ${lead.domain}…` });
   const baseUrl = `https://${lead.domain}`;
-  const site = await fetchSiteContent(baseUrl);
+  const site = await fetchSiteContent(baseUrl, tracker);
   for (const note of site.notes) {
     emit({ type: "status", step: "fetch_site", message: note });
   }
@@ -301,10 +306,19 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   // it runs alongside the engine loop instead of after it.
   const arpuBranch = (async (): Promise<ArpuVerdict | null> => {
     try {
+      // A pricing signal actually exists (from the site, or the search
+      // fallback) vs. none at all. When there's truly nothing, we still ask
+      // the model for demand/revenue judgment (useful for the lost-leads
+      // math below) but never trust — or show — a price it had to invent
+      // from nothing. See scrape.ts's fetchSiteContent for how pricingSource
+      // is determined.
+      const pricingKnown = site.pricingSource !== "none";
+
       const out = await generateJson<{
         classification: Classification;
         anchorPriceMonthlyUsd: number;
         priceBasis: PriceBasis;
+        priceConfidence: string;
         isTransactionalConsumerSpend: boolean;
         demandLevel: DemandLevel;
         estimate: string;
@@ -320,31 +334,51 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
           pricingSignals: brand.pricingSignals,
           pricingModel: brand.pricingModel,
           leadsThresholdUsd: config.leadsThresholdUsd,
+          pricingSource: site.pricingSource,
         }),
         schema: arpuSchema,
         tracker,
         costLabel: "classify_arpu",
       });
+
       // The deterministic rule is the source of truth, not the model's own
       // self-labeled `classification` field — the model is reliable at pricing
       // and demand estimates, less reliable at consistently applying the
-      // threshold rule to its own output.
-      const verdict: ArpuVerdict = {
-        classification: deriveClassification({
-          anchorPriceMonthlyUsd: out.anchorPriceMonthlyUsd,
-          isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
-          demandLevel: out.demandLevel,
-          thresholdUsd: config.leadsThresholdUsd,
-        }),
-        anchorPriceMonthlyUsd: out.anchorPriceMonthlyUsd,
-        priceBasis: out.priceBasis,
-        isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
-        demandLevel: out.demandLevel,
-        estimate: out.estimate,
-        reasoning: out.reasoning,
-        transactionNoun: out.transactionNoun,
-        plausibleMonthlyRevenueUsd: out.plausibleMonthlyRevenueUsd,
-      };
+      // threshold rule to its own output. When no pricing signal exists at
+      // all, code overrides both classification and price outright rather
+      // than trusting the model not to guess — see item 3 of the site
+      // ingestion fix: an honest "unknown" beats a silently invented number.
+      const verdict: ArpuVerdict = pricingKnown
+        ? {
+            classification: deriveClassification({
+              anchorPriceMonthlyUsd: out.anchorPriceMonthlyUsd,
+              isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
+              demandLevel: out.demandLevel,
+              thresholdUsd: config.leadsThresholdUsd,
+            }),
+            anchorPriceMonthlyUsd: out.anchorPriceMonthlyUsd,
+            priceBasis: out.priceBasis,
+            priceConfidence: resolvePriceConfidence(site.pricingSource as "site" | "search", out.priceConfidence),
+            isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
+            demandLevel: out.demandLevel,
+            estimate: out.estimate,
+            reasoning: out.reasoning,
+            transactionNoun: out.transactionNoun,
+            plausibleMonthlyRevenueUsd: out.plausibleMonthlyRevenueUsd,
+          }
+        : {
+            classification: "unknown_pricing",
+            anchorPriceMonthlyUsd: null,
+            priceBasis: out.priceBasis,
+            priceConfidence: undefined,
+            isTransactionalConsumerSpend: out.isTransactionalConsumerSpend,
+            demandLevel: out.demandLevel,
+            estimate: "Pricing not detectable",
+            reasoning:
+              "We checked your homepage, common pricing paths (/pricing, /plans, /subscribe, and others), pricing-related nav and footer links, and a web search for your pricing — none of it turned up a number we could anchor on. Rather than guess, we're marking this unknown.",
+            transactionNoun: out.transactionNoun,
+            plausibleMonthlyRevenueUsd: out.plausibleMonthlyRevenueUsd,
+          };
       emit({ type: "arpu", data: verdict });
       return verdict;
     } catch (e) {

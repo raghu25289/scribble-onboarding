@@ -150,17 +150,28 @@ export function arpuClassificationPrompt(input: {
   pricingSignals: string;
   pricingModel: string;
   leadsThresholdUsd: number;
+  pricingSource: "site" | "search" | "none";
 }): string {
   const t = input.leadsThresholdUsd;
+  const sourceNote =
+    input.pricingSource === "site"
+      ? "This evidence was read directly from the brand's own website."
+      : input.pricingSource === "search"
+        ? "The brand's own site didn't yield readable pricing content, so this evidence came from a web search about the brand's pricing instead."
+        : "No pricing evidence was found on the site or via web search — anything you state here is a pure category-level assumption with zero direct evidence behind it, not a real observed number.";
   return `Company: ${input.domain}
 What it does: ${input.brandProduct}
 Category: ${input.brandCategory}
 Pricing model: ${input.pricingModel}
 Pricing evidence found: ${input.pricingSignals}
+${sourceNote}
 
 Work through this in order:
 
-1. Find the highest PAID tier price in the evidence above. Completely ignore any free or freemium tier — it has zero weight here. If pricing isn't explicit, infer a realistic figure from the category and typical deal size, and state that assumption in your reasoning.
+1. Find the highest PAID tier price in the evidence above. Completely ignore any free or freemium tier — it has zero weight here. If pricing isn't explicit, infer a realistic figure from the category and typical deal size, and state that assumption in your reasoning. Track how you got this number for priceConfidence:
+   - "found_on_site": the evidence states an explicit price and came from the brand's own site.
+   - "search_derived": the evidence states an explicit price but came from a web search (see note above), not the site itself.
+   - "assumed": no explicit number appears anywhere in the evidence and you inferred one from category/brand knowledge, regardless of source.
 
 2. Normalize that price to a monthly figure:
    - Annual-only pricing: divide by 12.
@@ -184,6 +195,7 @@ Return:
 - classification: "leads" | "brand" | "leads_low_volume", per the rule above.
 - anchorPriceMonthlyUsd: the normalized monthly anchor price, in USD, as a plain number (e.g. 99, not "$99" or "99/mo").
 - priceBasis: "listed" | "annualized" | "per_seat" | "enterprise_assumed".
+- priceConfidence: "found_on_site" | "search_derived" | "assumed", per step 1.
 - isTransactionalConsumerSpend: boolean, per step 3.
 - demandLevel: "high" | "medium" | "near_zero", per step 4.
 - estimate: a short human-readable figure with its unit and what it's anchored on (e.g. "$99/mo (Pro tier)", "$12k/yr → $1k/mo (Enterprise, annualized)", "~$15/booking (assumed transactional)").

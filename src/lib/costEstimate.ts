@@ -66,7 +66,11 @@ export function formatMoney(n: number): string {
 }
 
 // "$99" — the normalized monthly anchor price the classification was based on.
+// "—" when pricing is unknown (classification "unknown_pricing") — callers
+// showing dollar figures should generally branch on classification before
+// reaching here at all; this is a defensive fallback, not the primary guard.
 export function formatAnchorPrice(arpu: ArpuVerdict): string {
+  if (arpu.anchorPriceMonthlyUsd == null) return "—";
   return formatMoney(arpu.anchorPriceMonthlyUsd);
 }
 
@@ -81,7 +85,12 @@ function estimateQueryRaw(demand: QueryWithDemand, arpu: ArpuVerdict): RawEstima
   const band = DEMAND_BANDS[demand.demandTier];
   const mid = tierMidpoint(demand.demandTier);
   const capture = captureRate(mid);
-  const price = demand.mappedPriceMonthlyUsd ?? arpu.anchorPriceMonthlyUsd;
+  // Falls back to 0, not null, when neither a per-product price nor an
+  // anchor price is available (unknown_pricing) — keeps the $ math at a
+  // harmless zero instead of NaN. Lead counts below don't depend on price,
+  // so they stay meaningful even when this is 0; callers must not render the
+  // $ figures in that case (see CostCard's pricingUnknown branch).
+  const price = demand.mappedPriceMonthlyUsd ?? arpu.anchorPriceMonthlyUsd ?? 0;
 
   const lowLeads = band.low * capture.low;
   const highLeads = mid * capture.high;

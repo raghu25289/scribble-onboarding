@@ -107,7 +107,10 @@ export interface QueryWithDemand {
   mappedPriceMonthlyUsd: number | null; // looked up from BrandProduct in code; null falls back to arpu.anchorPriceMonthlyUsd
 }
 
-export type Classification = "leads" | "brand" | "leads_low_volume";
+// "unknown_pricing": no pricing signal was found anywhere (site or search) —
+// a deterministic, code-side fallback (see analyze.ts) that overrides
+// whatever the model returned rather than letting it guess a number.
+export type Classification = "leads" | "brand" | "leads_low_volume" | "unknown_pricing";
 
 // How the anchor price was derived from the pricing evidence.
 export type PriceBasis = "listed" | "annualized" | "per_seat" | "enterprise_assumed";
@@ -117,10 +120,19 @@ export type PriceBasis = "listed" | "annualized" | "per_seat" | "enterprise_assu
 // price clears the leads threshold — see deriveClassification.
 export type DemandLevel = "high" | "medium" | "near_zero";
 
+// How trustworthy the anchor price is. "found_on_site" is a real number read
+// off the brand's own pages (raw fetch or the JS-render Extract fallback);
+// "search_derived" came from a web search instead of the site itself;
+// "assumed" means the site/search evidence existed but didn't state a number,
+// so the model inferred one from category/brand knowledge. Undefined when
+// classification is "unknown_pricing" — there is no price to have confidence in.
+export type PriceConfidence = "found_on_site" | "search_derived" | "assumed";
+
 export interface ArpuVerdict {
   classification: Classification;
-  anchorPriceMonthlyUsd: number; // highest paid-tier price, normalized to a monthly USD figure. A free/freemium tier never affects this.
+  anchorPriceMonthlyUsd: number | null; // highest paid-tier price, normalized to a monthly USD figure. Null when classification is "unknown_pricing". A free/freemium tier never affects this.
   priceBasis: PriceBasis;
+  priceConfidence?: PriceConfidence; // absent when classification is "unknown_pricing"
   isTransactionalConsumerSpend: boolean; // one-off consumer purchase (booking, basket) vs. a recurring subscription relationship
   demandLevel: DemandLevel;
   estimate: string; // human-readable figure, e.g. "$99/mo (Pro tier)"
