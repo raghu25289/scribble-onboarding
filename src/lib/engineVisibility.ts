@@ -73,3 +73,28 @@ export function computeHeadlineScore(queries: QueryVisibility[]): {
 export function isQueryFullyChecked(qv: QueryVisibility): boolean {
   return ALL_ENGINES.every((e) => qv.engines[e] !== undefined);
 }
+
+export interface CompetitorWinCount {
+  name: string;
+  count: number;
+}
+
+// Distinct competitor names across a set of query rows, most-frequent first,
+// with how many of those rows each one wins — used anywhere a "who's winning
+// instead" chip list needs to show its frequency, not just its name.
+export function competitorWinCounts(rows: { winners: Winner[] }[]): CompetitorWinCount[] {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  for (const row of rows) {
+    for (const w of row.winners) {
+      if (!counts.has(w.name)) {
+        counts.set(w.name, 0);
+        order.push(w.name);
+      }
+      counts.set(w.name, (counts.get(w.name) ?? 0) + 1);
+    }
+  }
+  return order
+    .map((name) => ({ name, count: counts.get(name) ?? 0 }))
+    .sort((a, b) => b.count - a.count);
+}

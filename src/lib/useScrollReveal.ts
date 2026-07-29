@@ -51,3 +51,45 @@ export function useScrollReveal<T extends HTMLElement>(threshold = 0.35) {
 
   return { ref, inView, reducedMotion };
 }
+
+// A count-up driven by an externally-owned trigger (e.g. one shared
+// useScrollReveal for a whole grid of tiles) rather than its own
+// IntersectionObserver. Starts once when `trigger` flips true, runs once,
+// and renders straight at `target` under reduced motion — same contract as
+// useCountUp, but decoupled from viewport observation.
+export function useRevealCountUp(
+  target: number,
+  trigger: boolean,
+  reducedMotion: boolean,
+  durationMs = 600
+): number {
+  const [value, setValue] = useState(reducedMotion ? target : 0);
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setValue(target);
+      return;
+    }
+    if (!trigger || startedRef.current) return;
+    startedRef.current = true;
+
+    let rafId = 0;
+    let cancelled = false;
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (cancelled) return;
+      const progress = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(target * eased));
+      if (progress < 1) rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [trigger, reducedMotion, target, durationMs]);
+
+  return value;
+}

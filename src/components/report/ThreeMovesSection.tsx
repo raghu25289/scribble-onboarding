@@ -21,6 +21,7 @@ export default function ThreeMovesSection({ moves }: { moves: [ReportMove, Repor
   return (
     <section
       ref={ref}
+      id="moves"
       className={`report-section reveal-on-scroll mx-auto max-w-3xl px-6 py-24 ${inView ? "is-visible" : ""}`}
     >
       <h2 className="font-display text-2xl font-semibold sm:text-3xl">

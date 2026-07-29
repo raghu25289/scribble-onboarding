@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { store } from "@/lib/store";
 import { computeHeadlineScore } from "@/lib/engineVisibility";
-import { estimateMonthlyAskVolume } from "@/lib/costEstimate";
 import { fallbackBenchmark, fallbackReportMoves } from "@/lib/reportInsights";
 import type { OnboardingRecord } from "@/lib/types";
 import ReportHeader from "@/components/report/ReportHeader";
-import ReportHero from "@/components/report/ReportHero";
+import BentoHero from "@/components/report/BentoHero";
 import WhatsWorkingSection from "@/components/report/WhatsWorkingSection";
 import WhatIsntSection from "@/components/report/WhatIsntSection";
 import IndustryStandardSection from "@/components/report/IndustryStandardSection";
@@ -46,7 +45,6 @@ export default async function ReportPage({ params }: Props) {
 
   const { visible, total } = computeHeadlineScore(record.visibility);
   const headlineScorePct = total > 0 ? Math.round((visible / total) * 100) : 0;
-  const buyerVolume = estimateMonthlyAskVolume(record.queries);
   const category = record.brand?.category || "your category";
 
   const benchmark = record.reportInsights?.benchmark ?? fallbackBenchmark(headlineScorePct);
@@ -57,7 +55,15 @@ export default async function ReportPage({ params }: Props) {
   return (
     <div className="report-page bg-stage min-h-screen">
       <ReportHeader domain={record.domain} completedAt={record.completedAt} />
-      <ReportHero domain={record.domain} scorePct={headlineScorePct} buyerVolume={buyerVolume} />
+      <BentoHero
+        domain={record.domain}
+        completedAt={record.completedAt}
+        category={category}
+        queries={record.queries}
+        visibility={record.visibility}
+        pillars={record.pillars}
+        arpu={record.arpu}
+      />
       <WhatsWorkingSection
         queries={record.queries}
         visibility={record.visibility}

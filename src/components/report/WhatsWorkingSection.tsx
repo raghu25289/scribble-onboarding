@@ -33,6 +33,7 @@ export default function WhatsWorkingSection({ queries, visibility, pillars }: Pr
   return (
     <section
       ref={ref}
+      id="working"
       className={`report-section reveal-on-scroll mx-auto max-w-3xl px-6 py-24 ${inView ? "is-visible" : ""}`}
     >
       <span

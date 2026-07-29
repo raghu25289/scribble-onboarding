@@ -37,7 +37,7 @@ export default function ReportCta({ domain, headlineScorePct, completedAt }: Pro
   )}`;
 
   return (
-    <section className="report-section mx-auto max-w-2xl px-6 py-24 text-center">
+    <section id="book" className="report-section mx-auto max-w-2xl px-6 py-24 text-center">
       <h2 className="font-display text-3xl font-semibold sm:text-4xl">
         Fix it before your competitors notice.
       </h2>

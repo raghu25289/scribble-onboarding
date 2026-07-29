@@ -1,6 +1,6 @@
 "use client";
 
-import { aggregateQuery } from "@/lib/engineVisibility";
+import { aggregateQuery, competitorWinCounts } from "@/lib/engineVisibility";
 import { useScrollReveal } from "@/lib/useScrollReveal";
 import {
   computeCostBreakdown,
@@ -9,7 +9,7 @@ import {
   tierLabel,
   truncateLabel,
 } from "@/lib/costEstimate";
-import type { ArpuVerdict, QueryVisibility, QueryWithDemand, Winner } from "@/lib/types";
+import type { ArpuVerdict, QueryVisibility, QueryWithDemand } from "@/lib/types";
 import EngineChips from "@/components/EngineChips";
 
 const RECOVERABLE_SHARE = 0.6;
@@ -18,23 +18,6 @@ interface Props {
   queries: QueryWithDemand[];
   visibility: QueryVisibility[];
   arpu: ArpuVerdict | null;
-}
-
-// Distinct competitor names across every invisible query, most-frequent
-// first, for the "rivals filing into the room" chip row.
-function collectCompetitors(rows: { winners: Winner[] }[]): string[] {
-  const counts = new Map<string, number>();
-  const order: string[] = [];
-  for (const row of rows) {
-    for (const w of row.winners) {
-      if (!counts.has(w.name)) {
-        counts.set(w.name, 0);
-        order.push(w.name);
-      }
-      counts.set(w.name, (counts.get(w.name) ?? 0) + 1);
-    }
-  }
-  return order.sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0)).slice(0, 10);
 }
 
 export default function WhatIsntSection({ queries, visibility, arpu }: Props) {
@@ -48,7 +31,9 @@ export default function WhatIsntSection({ queries, visibility, arpu }: Props) {
     }))
     .filter((r) => r.agg.checkedCount > 0 && r.agg.invisible);
 
-  const competitors = collectCompetitors(rows.map((r) => ({ winners: r.agg.winners })));
+  const competitors = competitorWinCounts(rows.map((r) => ({ winners: r.agg.winners })))
+    .slice(0, 10)
+    .map((c) => c.name);
 
   const pricingUnknown = arpu?.classification === "unknown_pricing";
   const leadsFirst = arpu ? arpu.classification === "leads" || pricingUnknown : false;
@@ -63,6 +48,7 @@ export default function WhatIsntSection({ queries, visibility, arpu }: Props) {
   return (
     <section
       ref={ref}
+      id="matrix"
       className={`report-section reveal-on-scroll mx-auto max-w-3xl px-6 py-24 ${inView ? "is-visible" : ""}`}
     >
       <span
@@ -102,7 +88,7 @@ export default function WhatIsntSection({ queries, visibility, arpu }: Props) {
       </div>
 
       {breakdown && sortedRows.length > 0 && (
-        <div className="mt-8 space-y-4">
+        <div id="loss-bars" className="mt-8 space-y-4">
           {sortedRows.map((row, i) => {
             const widthPct = Math.max(6, Math.round((barValue(row) / maxBarValue) * 100));
             const recoverablePct = widthPct * RECOVERABLE_SHARE;
