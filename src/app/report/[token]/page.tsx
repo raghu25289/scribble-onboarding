@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { store } from "@/lib/store";
-import { computeHeadlineScore } from "@/lib/engineVisibility";
-import { fallbackBenchmark, fallbackReportMoves } from "@/lib/reportInsights";
+import { aggregateQuery, competitorWinCounts, computeHeadlineScore } from "@/lib/engineVisibility";
+import { fallbackBenchmark, fallbackLegitimateCompetitors, fallbackReportMoves } from "@/lib/reportInsights";
 import type { OnboardingRecord } from "@/lib/types";
 import ReportHeader from "@/components/report/ReportHeader";
 import BentoHero from "@/components/report/BentoHero";
@@ -52,6 +52,16 @@ export default async function ReportPage({ params }: Props) {
     record.reportInsights?.moves ??
     (record.pillars ? fallbackReportMoves(record.pillars) : null);
 
+  const invisibleRows = record.queries
+    .map((q, i) => ({ agg: aggregateQuery(record.visibility[i] ?? { query: q.text, engines: {} }) }))
+    .filter((r) => r.agg.checkedCount > 0 && r.agg.invisible);
+  const competitorCandidates = competitorWinCounts(invisibleRows.map((r) => ({ winners: r.agg.winners }))).slice(
+    0,
+    10
+  );
+  const legitimateCompetitors =
+    record.reportInsights?.legitimateCompetitors ?? fallbackLegitimateCompetitors(competitorCandidates);
+
   return (
     <div className="report-page bg-stage min-h-screen">
       <ReportHeader domain={record.domain} completedAt={record.completedAt} />
@@ -63,6 +73,7 @@ export default async function ReportPage({ params }: Props) {
         visibility={record.visibility}
         pillars={record.pillars}
         arpu={record.arpu}
+        legitimateCompetitors={legitimateCompetitors}
       />
       <WhatsWorkingSection
         queries={record.queries}

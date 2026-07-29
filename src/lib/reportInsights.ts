@@ -41,8 +41,12 @@ const reportInsightsSchema = {
         required: ["title", "description", "impact", "pillar"],
       },
     },
+    legitimateCompetitors: {
+      type: "array",
+      items: { type: "string" },
+    },
   },
-  required: ["benchmark", "moves"],
+  required: ["benchmark", "moves", "legitimateCompetitors"],
 };
 
 // Defensive backstop against the prompt's "no em dash" instruction being
@@ -55,9 +59,42 @@ function clampPct(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+export interface CompetitorCandidate {
+  name: string;
+  count: number;
+}
+
+// Deterministic pre/post filter for obviously junk competitor names — random
+// slugs, parked-domain-looking strings — so the hero bento's "who wins" tile
+// never shows garbage even when the LLM legitimacy check fails or is wrong.
+// The detailed matrix further down still shows every raw winner unfiltered.
+export function looksLikeJunkName(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  // 3+ consecutive digits: real brand/publication names essentially never
+  // have long digit runs (contrast a raw slug like "xk294plq7").
+  if (/\d{3,}/.test(trimmed)) return true;
+  // A short alnum blob sitting on a low-trust/free TLD — reads as a raw
+  // parked or throwaway domain, not a brand.
+  if (/^[a-z0-9-]{3,20}\.(xyz|top|click|info|biz|online|site|shop|click)$/i.test(trimmed)) return true;
+  // No vowels across a longish token: reads as a random string, not a word.
+  const letters = trimmed.replace(/[^a-z]/gi, "");
+  if (letters.length >= 6 && !/[aeiou]/i.test(letters)) return true;
+  return false;
+}
+
+// Pure-code fallback (no LLM) for when generateReportInsights fails
+// entirely — still strips the obvious junk via the heuristic above.
+export function fallbackLegitimateCompetitors(
+  candidates: CompetitorCandidate[]
+): CompetitorCandidate[] {
+  return candidates.filter((c) => !looksLikeJunkName(c.name)).slice(0, 5);
+}
+
 interface RawInsights {
   benchmark: { leaderPct: number; medianPct: number };
   moves: { title: string; description: string; impact: ReportMoveImpact; pillar: PillarId }[];
+  legitimateCompetitors: string[];
 }
 
 export async function generateReportInsights(input: {
@@ -68,9 +105,15 @@ export async function generateReportInsights(input: {
   pillars: PillarScores;
   invisibleQueries: { query: string; winners: string[] }[];
   topCompetitors: string[];
+  competitorCandidates: CompetitorCandidate[];
   tracker?: CostTracker;
 }): Promise<ReportInsights> {
   const pillarList = [input.pillars.onsite, input.pillars.reviews, input.pillars.thirdparty];
+
+  // Drop obvious junk before it ever reaches the model — saves tokens and
+  // means the LLM only has to judge genuinely borderline/legitimate-looking
+  // names for spam/parked/irrelevant.
+  const preFiltered = input.competitorCandidates.filter((c) => !looksLikeJunkName(c.name));
 
   const out = await generateJson<RawInsights>({
     system: REPORT_INSIGHTS_SYSTEM,
@@ -82,6 +125,7 @@ export async function generateReportInsights(input: {
       pillars: pillarList,
       invisibleQueries: input.invisibleQueries,
       topCompetitors: input.topCompetitors,
+      competitorCandidates: preFiltered.map((c) => c.name),
     }),
     schema: reportInsightsSchema,
     tracker: input.tracker,
@@ -111,9 +155,24 @@ export async function generateReportInsights(input: {
   const padding = generated.length < 3 ? fallbackReportMoves(input.pillars) : [];
   const moves = [...generated, ...padding].slice(0, 3) as [ReportMove, ReportMove, ReportMove];
 
+  // Only trust names that were actually offered as candidates (case-
+  // insensitive) — a model that hallucinates a new name gets ignored rather
+  // than shown. Re-attach the real counts, which are deterministic, not
+  // model-derived.
+  const candidateByLower = new Map(preFiltered.map((c) => [c.name.toLowerCase(), c]));
+  const legitimateFromModel = out.legitimateCompetitors
+    .map((name) => candidateByLower.get(name.toLowerCase()))
+    .filter((c): c is CompetitorCandidate => !!c && !looksLikeJunkName(c.name));
+
+  const legitimateCompetitors =
+    legitimateFromModel.length > 0
+      ? legitimateFromModel.slice(0, 5)
+      : fallbackLegitimateCompetitors(preFiltered);
+
   return {
     benchmark: { leaderPct, medianPct },
     moves,
+    legitimateCompetitors,
   };
 }
 

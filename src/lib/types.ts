@@ -170,6 +170,11 @@ export interface ReportInsights {
     medianPct: number; // estimated visibility % for the category median
   };
   moves: [ReportMove, ReportMove, ReportMove];
+  // Competitor names the model confirmed are real companies/publications in
+  // this category (spam/parked/junk domains dropped), most-frequent first,
+  // capped at 5 — the bento's "who wins" tile reads only from this list. The
+  // detailed matrix further down still shows every raw winner, junk or not.
+  legitimateCompetitors: { name: string; count: number }[];
 }
 
 export type ReportMoveImpact = "high_leverage" | "fast_win" | "compounding";

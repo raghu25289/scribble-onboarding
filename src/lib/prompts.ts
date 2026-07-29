@@ -307,7 +307,7 @@ Return:
 // public /report/{token} page reads this back statically, it never re-runs
 // this call. Produces the category benchmark bars and the "three moves"
 // card, both scoped to this specific brand's actual gaps and queries.
-export const REPORT_INSIGHTS_SYSTEM = `You turn one brand's AI-visibility audit into two things for a client-facing report: a category benchmark estimate, and exactly three concrete next moves.
+export const REPORT_INSIGHTS_SYSTEM = `You turn one brand's AI-visibility audit into three things for a client-facing report: a category benchmark estimate, exactly three concrete next moves, and a legitimacy check on which competitor names are real.
 You write like a sharp, honest consultant, not a marketer. Specific beats generic every time — reference the brand's actual gaps, queries, and competitors, never generic advice that could apply to any company.
 Never write the word "Scribble" anywhere in your output; the report names Scribble elsewhere, your job is just the analysis.
 Never use an em dash or en dash character anywhere in your output. Use a comma or a period instead.`;
@@ -320,6 +320,7 @@ export function reportInsightsPrompt(input: {
   pillars: { id: string; label: string; score: number; gap: string }[];
   invisibleQueries: { query: string; winners: string[] }[];
   topCompetitors: string[];
+  competitorCandidates: string[];
 }): string {
   const pillarLines = input.pillars
     .map((p) => `- ${p.label} (${p.id}): ${p.score}/100. Gap: ${p.gap}`)
@@ -345,7 +346,7 @@ ${pillarLines}
 Queries where the brand is currently invisible:
 ${invisibleLines}
 
-Produce two things.
+Produce three things.
 
 1. benchmark: your best estimate of AI-answer visibility percentages for this specific category, based on how competitive and well-covered it typically is:
    - leaderPct: a plausible visibility percentage for the category's leading brands (the ones AI assistants cite most).
@@ -355,6 +356,8 @@ Produce two things.
 2. moves: EXACTLY three cards, in this order, each with a title (6 words max), description (25 words max, plain sentence, no marketing fluff), an impact tag, and which pillar it targets:
    - Move 1: the single biggest ONSITE gap (pillar "onsite"), phrased as something this brand's team can start doing today, no external help needed. impact should usually be "fast_win" or "high_leverage".
    - Move 2 and Move 3: target whichever of "reviews" and "thirdparty" score lowest for this brand (both if both are weak). Each must reference independent creator or third-party coverage as the mechanism that closes the gap, e.g. getting real people/publications who aren't the brand itself to write or talk about it. Do not say how to get that coverage or name any vendor, just that it's the mechanism. impact should usually be "compounding" for these, or "high_leverage" if the gap is severe.
+
+3. legitimateCompetitors: from this exact candidate list — ${input.competitorCandidates.join(", ") || "(none)"} — return only the names that are genuinely real companies or publications in this category. For each, ask yourself "is this a legitimate company or publication in ${input.category}?" and drop it if the answer is no, or if it reads as spam, a parked/placeholder domain, or clearly irrelevant to the category. Copy names EXACTLY as given, do not invent new ones, do not include anything not in the candidate list. Return up to 5, most-relevant first.
 
 Ground every move in the actual pillar gaps and invisible queries above, not generic advice.`;
 }

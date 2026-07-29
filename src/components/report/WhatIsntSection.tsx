@@ -6,6 +6,7 @@ import {
   computeCostBreakdown,
   formatMoney,
   round2SigFigs,
+  roundLeadCount,
   tierLabel,
   truncateLabel,
 } from "@/lib/costEstimate";
@@ -132,7 +133,7 @@ export default function WhatIsntSection({ queries, visibility, arpu }: Props) {
           <p className="text-sm font-medium" style={{ color: "var(--win)" }}>
             Estimated{" "}
             {leadsFirst
-              ? `${round2SigFigs(breakdown.totalLowLeads * RECOVERABLE_SHARE).toLocaleString("en-US")} leads/mo`
+              ? `${roundLeadCount(breakdown.totalLowLeads * RECOVERABLE_SHARE).toLocaleString("en-US")} leads/mo`
               : `${formatMoney(round2SigFigs(breakdown.totalLowUsd * RECOVERABLE_SHARE))} per month`}{" "}
             recoverable.
           </p>

@@ -65,6 +65,13 @@ export function formatMoney(n: number): string {
   return `${CURRENCY_SYMBOL}${Math.round(n).toLocaleString("en-US")}`;
 }
 
+// Leads are a count of people, never fractional — round2SigFigs alone can
+// still leave a decimal below 10 (e.g. 4.3), so every lead figure funnels
+// through this instead: a whole number, at least 1.
+export function roundLeadCount(n: number): number {
+  return Math.max(1, Math.round(n));
+}
+
 // "$99" — the normalized monthly anchor price the classification was based on.
 // "—" when pricing is unknown (classification "unknown_pricing") — callers
 // showing dollar figures should generally branch on classification before
@@ -150,8 +157,8 @@ export function computeCostBreakdown<T extends { demand: QueryWithDemand }>(
   const scaledRows = rows.map((r, i) => {
     const lowUsd = round2SigFigs(raw[i].lowUsd * factor);
     const highUsd = round2SigFigs(Math.max(raw[i].highUsd * factor, lowUsd));
-    const lowLeads = round2SigFigs(raw[i].lowLeads * factor);
-    const highLeads = round2SigFigs(Math.max(raw[i].highLeads * factor, lowLeads));
+    const lowLeads = roundLeadCount(raw[i].lowLeads * factor);
+    const highLeads = Math.max(roundLeadCount(raw[i].highLeads * factor), lowLeads);
     return { ...r, lowUsd, highUsd, lowLeads, highLeads, tier: r.demand.demandTier };
   });
 
@@ -170,8 +177,8 @@ export function computeCostBreakdown<T extends { demand: QueryWithDemand }>(
     rows: scaledRows,
     totalLowUsd: round2SigFigs(totalLowUsd),
     totalHighUsd: round2SigFigs(totalHighUsd),
-    totalLowLeads: round2SigFigs(totalLowLeads),
-    totalHighLeads: round2SigFigs(totalHighLeads),
+    totalLowLeads: roundLeadCount(totalLowLeads),
+    totalHighLeads: Math.max(roundLeadCount(totalHighLeads), roundLeadCount(totalLowLeads)),
     capped,
   };
 }

@@ -76,6 +76,16 @@ html:has(.report-page) {
 }
 .bento-scroll-indicator { animation: bento-scroll-hint 1.8s ease-in-out infinite; }
 
+/* ── Report page: CTA tile's dynamic column span (desktop only) ─────────────
+   Set inline via the --cta-span custom property so the grid always resolves
+   to a complete rectangle regardless of which tiles collapsed. Mobile stacks
+   single-column, so this only needs to apply at the sm: grid breakpoint. */
+@media (min-width: 640px) {
+  .cta-tile-dynamic {
+    grid-column: span var(--cta-span, 1) / span var(--cta-span, 1);
+  }
+}
+
 /* ── Report page: bento tile entrance (rise + fade, under 500ms) ────────────── */
 .bento-tile {
   opacity: 0;

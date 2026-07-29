@@ -16,7 +16,7 @@ import { checkEngineVisibility, fetchWebSearch } from "./engines";
 import { store, makeId, makeReportToken } from "./store";
 import { deriveClassification, resolvePriceConfidence } from "./classification";
 import { assessOnsite, assessReviewSites, assessThirdParty, runAnchoredPillarSearches } from "./pillars";
-import { aggregateQuery, computeHeadlineScore } from "./engineVisibility";
+import { aggregateQuery, competitorWinCounts, computeHeadlineScore } from "./engineVisibility";
 import { generateReportInsights } from "./reportInsights";
 import {
   BRAND_UNDERSTANDING_SYSTEM,
@@ -435,10 +435,16 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
     try {
       const { visible, total } = computeHeadlineScore(queryVisibilities);
       const headlineScorePct = total > 0 ? Math.round((visible / total) * 100) : 0;
-      const invisibleQueries = queryVisibilities
+      const invisibleRows = queryVisibilities
         .map((qv) => ({ query: qv.query, agg: aggregateQuery(qv) }))
-        .filter((r) => r.agg.invisible)
-        .map((r) => ({ query: r.query, winners: r.agg.winners.map((w) => w.name) }));
+        .filter((r) => r.agg.invisible);
+      const invisibleQueries = invisibleRows.map((r) => ({
+        query: r.query,
+        winners: r.agg.winners.map((w) => w.name),
+      }));
+      const competitorCandidates = competitorWinCounts(
+        invisibleRows.map((r) => ({ winners: r.agg.winners }))
+      ).slice(0, 10);
 
       record.reportInsights = await generateReportInsights({
         domain: lead.domain,
@@ -448,6 +454,7 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         pillars,
         invisibleQueries,
         topCompetitors: brand.topCompetitors,
+        competitorCandidates,
         tracker,
       });
     } catch (e) {
