@@ -18,7 +18,7 @@ export default function EngineColumnHeaders() {
       {REAL_ENGINES.map((engine) => (
         <div
           key={engine}
-          className="truncate text-center text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]"
+          className="truncate text-center text-[10px] font-medium uppercase tracking-wide text-[var(--ink-45)]"
         >
           {ENGINE_LABELS[engine]}
         </div>

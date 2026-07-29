@@ -23,7 +23,7 @@ function EnginePill({ result }: { result: QueryVisibility["engines"][EngineId] }
   if (!result.ok) {
     return (
       <span
-        className="mx-auto flex h-6 w-9 items-center justify-center rounded-full border border-[var(--panel-line)] text-[10px] text-[var(--muted)]"
+        className="mx-auto flex h-6 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[10px] text-[var(--ink-45)]"
         title="Couldn't check"
       >
         –
@@ -33,7 +33,7 @@ function EnginePill({ result }: { result: QueryVisibility["engines"][EngineId] }
   return (
     <span
       className="mx-auto flex h-6 w-9 items-center justify-center rounded-full text-xs font-bold text-[var(--ink)]"
-      style={{ background: result.visible ? "var(--win)" : "var(--miss)" }}
+      style={{ background: result.visible ? "var(--lime-deep)" : "var(--danger)" }}
       title={result.visible ? "Visible" : "Invisible"}
     >
       {result.visible ? "✓" : "✕"}

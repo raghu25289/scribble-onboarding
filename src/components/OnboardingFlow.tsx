@@ -216,8 +216,8 @@ export default function OnboardingFlow() {
 
       {fatalError && (
         <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{ borderColor: "rgba(255,107,107,0.35)", background: "rgba(255,107,107,0.08)" }}
+          className="rounded-lg border px-4 py-3 text-sm"
+          style={{ borderColor: "var(--danger-border)", background: "var(--danger-tint)" }}
         >
           {fatalError}{" "}
           <button

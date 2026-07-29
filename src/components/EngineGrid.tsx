@@ -24,13 +24,13 @@ export default function EngineGrid({ visibility }: { visibility: QueryVisibility
       >
         <div />
         {REAL_ENGINES.map((engine) => (
-          <div key={engine} className="text-center text-[10px] font-medium text-[var(--muted)]">
+          <div key={engine} className="text-center text-[10px] font-medium text-[var(--ink-45)]">
             {ENGINE_LABELS[engine]}
           </div>
         ))}
         {visibility.map((qv, i) => (
           <Fragment key={i}>
-            <div className="truncate text-xs text-[var(--muted)]" title={qv.query}>
+            <div className="truncate text-xs text-[var(--ink-45)]" title={qv.query}>
               {truncateLabel(qv.query, 34)}
             </div>
             {REAL_ENGINES.map((engine) => {
@@ -46,21 +46,21 @@ export default function EngineGrid({ visibility }: { visibility: QueryVisibility
 
 function Cell({ result }: { result: QueryVisibility["engines"][EngineId] }) {
   if (!result) {
-    return <span className="skeleton mx-auto block h-5 w-5 rounded" />;
+    return <span className="skeleton mx-auto block h-5 w-5 rounded-lg" />;
   }
   if (!result.ok) {
     return (
       <span
-        className="mx-auto block h-5 w-5 rounded"
-        style={{ background: "var(--panel-line)" }}
+        className="mx-auto block h-5 w-5 rounded-lg"
+        style={{ background: "var(--border)" }}
         title="Couldn't check"
       />
     );
   }
   return (
     <span
-      className="mx-auto block h-5 w-5 rounded"
-      style={{ background: result.visible ? "var(--win)" : "var(--miss)" }}
+      className="mx-auto block h-5 w-5 rounded-lg"
+      style={{ background: result.visible ? "var(--lime-deep)" : "var(--danger)" }}
       title={result.visible ? "Visible" : "Invisible"}
     />
   );

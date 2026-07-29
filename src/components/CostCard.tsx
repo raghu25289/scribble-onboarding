@@ -69,12 +69,12 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
 
   return (
     <section
-      className="fade-up rounded-2xl border p-6"
-      style={{ borderColor: "rgba(255,107,107,0.3)", background: "rgba(255,107,107,0.05)" }}
+      className="fade-up rounded-lg border p-6"
+      style={{ borderColor: "var(--danger-border)", background: "var(--danger-tint)" }}
     >
       <span
-        className="inline-block rounded-md px-2 py-0.5 text-xs font-semibold text-[var(--ink)]"
-        style={{ background: "var(--miss)" }}
+        className="inline-block rounded-lg px-2 py-0.5 text-xs font-semibold text-[var(--ink)]"
+        style={{ background: "var(--danger)" }}
       >
         {leadsFirst ? "Leads at risk" : "Revenue at risk"}
       </span>
@@ -86,14 +86,14 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
       <div ref={countUpRef} className="mt-5">
         <div
           className="font-display text-5xl font-semibold tabular-nums sm:text-6xl"
-          style={{ color: "var(--miss)" }}
+          style={{ color: "var(--danger)" }}
         >
           {leadsFirst ? countUpValue.toLocaleString("en-US") : formatMoney(countUpValue)}
         </div>
-        <div className="mt-1 text-sm text-[var(--muted)]">
+        <div className="mt-1 text-sm text-[var(--ink-45)]">
           {leadsFirst ? "estimated leads lost, per month" : lostLabel}
         </div>
-        <div className="mt-2 text-sm text-[var(--muted)]">
+        <div className="mt-2 text-sm text-[var(--ink-45)]">
           Could reach{" "}
           {leadsFirst
             ? `${breakdown.totalHighLeads.toLocaleString("en-US")} leads/mo`
@@ -101,7 +101,7 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
           .
         </div>
         {breakdown.capped && (
-          <div className="mt-1 text-xs text-[var(--muted)]">
+          <div className="mt-1 text-xs text-[var(--ink-45)]">
             Conservatively capped to your estimated revenue scale.
           </div>
         )}
@@ -116,22 +116,22 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="font-medium leading-snug">
                   {truncateLabel(row.qv.query)}{" "}
-                  <span className="text-[11px] italic text-[var(--muted)]">{tierLabel(row.tier)}</span>
+                  <span className="text-[11px] italic text-[var(--ink-45)]">{tierLabel(row.tier)}</span>
                 </span>
-                <span className="shrink-0 text-[var(--muted)]">
+                <span className="shrink-0 text-[var(--ink-45)]">
                   {leadsFirst
                     ? `${row.lowLeads.toLocaleString("en-US")}–${row.highLeads.toLocaleString("en-US")} leads/mo`
                     : `${formatMoney(row.lowUsd)}–${formatMoney(row.highUsd)}/mo`}
                 </span>
               </div>
-              <div className="relative mt-1.5 h-2.5 w-full rounded-full bg-[var(--ink-soft)]">
+              <div className="relative mt-1.5 h-2.5 w-full rounded-sm bg-[var(--bg-subtle)]">
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full"
-                  style={{ width: `${widthPct}%`, background: "var(--miss)" }}
+                  className="absolute inset-y-0 left-0 rounded-sm"
+                  style={{ width: `${widthPct}%`, background: "var(--danger)" }}
                 />
                 <div
-                  className="absolute inset-y-0 left-0 rounded-full"
-                  style={{ width: `${recoverablePct}%`, background: "rgba(110,231,168,0.55)" }}
+                  className="absolute inset-y-0 left-0 rounded-sm"
+                  style={{ width: `${recoverablePct}%`, background: "var(--lime-60)" }}
                 />
               </div>
               {row.agg.winners.length > 0 && (
@@ -139,11 +139,11 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
                   {row.agg.winners.slice(0, 3).map((w, wi) => (
                     <span
                       key={wi}
-                      className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-0.5 text-xs"
                     >
                       {w.name}
                       {!w.verified && (
-                        <span className="ml-1 text-[9px] text-[var(--muted)]">unverified</span>
+                        <span className="ml-1 text-[9px] text-[var(--ink-45)]">unverified</span>
                       )}
                     </span>
                   ))}
@@ -154,24 +154,24 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
         })}
       </div>
 
-      <div className="mt-4 flex items-center gap-4 text-xs text-[var(--muted)]">
+      <div className="mt-4 flex items-center gap-4 text-xs text-[var(--ink-45)]">
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ background: "var(--miss)" }} />
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--danger)" }} />
           Lost today
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full" style={{ background: "rgba(110,231,168,0.7)" }} />
+          <span className="h-2 w-2 rounded-full" style={{ background: "var(--lime-60)" }} />
           Recoverable
         </span>
       </div>
 
-      <p className="mt-4 text-sm font-medium" style={{ color: "var(--win)" }}>
+      <p className="mt-4 text-sm font-medium" style={{ color: "var(--lime-deep)" }}>
         {pricingUnknown
           ? `Estimated ${recoverableLeads.toLocaleString("en-US")} leads/mo recoverable. Illustrative, based on past campaigns.`
           : `Estimated ${formatMoney(recoverableTotal)} per month recoverable. Illustrative, based on past campaigns.`}
       </p>
 
-      <p className="mt-3 text-xs text-[var(--muted)]">
+      <p className="mt-3 text-xs text-[var(--ink-45)]">
         {pricingUnknown
           ? "Estimates based on public search demand. We couldn't verify your pricing, so this is shown in leads, not dollars. Directional, not audited."
           : "Estimates based on public search demand and your revenue model. Directional, not audited."}
@@ -180,12 +180,12 @@ export default function CostCard({ brand, arpu, queries, visibility }: Props) {
       <button
         type="button"
         onClick={() => setShowMethod((v) => !v)}
-        className="mt-3 text-xs text-[var(--muted)] underline underline-offset-2"
+        className="mt-3 text-xs text-[var(--ink-45)] underline underline-offset-2"
       >
         {showMethod ? "Hide" : "How we calculated this"}
       </button>
       {showMethod && (
-        <div className="mt-2 rounded-xl border border-[var(--panel-line)] bg-[var(--ink-soft)] p-4 text-xs leading-relaxed text-[var(--muted)]">
+        <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-4 text-xs leading-relaxed text-[var(--ink-45)]">
           {pricingUnknown ? (
             <>
               Each query gets a demand tier (niche to mass) with a fixed

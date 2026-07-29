@@ -28,7 +28,7 @@ export default function VisibilityGauge({ visible, total, size = 132 }: Props) {
             cy={size / 2}
             r={r}
             fill="none"
-            stroke="var(--ink-soft)"
+            stroke="var(--border)"
             strokeWidth={stroke}
           />
           <circle
@@ -49,7 +49,7 @@ export default function VisibilityGauge({ visible, total, size = 132 }: Props) {
           </span>
         </div>
       </div>
-      <div className="mt-1.5 text-xs text-[var(--muted)]">
+      <div className="mt-1.5 text-xs text-[var(--ink-45)]">
         {visible}/{total} engine checks
       </div>
     </div>

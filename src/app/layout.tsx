@@ -23,15 +23,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Fraunces for the display serif — loaded via Google Fonts CSS. */}
+        {/* Funnel Sans is the only typeface app-wide — Arial fallback. */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Funnel+Sans:wght@400;500;700;800&display=swap"
           rel="stylesheet"
         />
       </head>
-      <body className="bg-stage min-h-screen">{children}</body>
+      <body className="min-h-screen">{children}</body>
     </html>
   );
 }

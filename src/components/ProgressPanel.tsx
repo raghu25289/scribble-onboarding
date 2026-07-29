@@ -30,13 +30,13 @@ export default function ProgressPanel({
   done,
 }: Props) {
   return (
-    <div className="rounded-2xl border border-[var(--panel-line)] bg-[var(--panel)] p-5 fade-up">
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-5 fade-up">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">
           {done ? "Analysis complete" : "Scribble is working…"}
         </h2>
         {!done && latestMessage && (
-          <span className="hidden max-w-[55%] truncate text-xs text-[var(--muted)] sm:inline">
+          <span className="hidden max-w-[55%] truncate text-xs text-[var(--ink-45)] sm:inline">
             {latestMessage}
           </span>
         )}
@@ -52,27 +52,27 @@ export default function ProgressPanel({
                 {isDone ? (
                   <span
                     className="flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-[var(--ink)]"
-                    style={{ background: "var(--win)" }}
+                    style={{ background: "var(--lime-deep)" }}
                   >
                     ✓
                   </span>
                 ) : isActive ? (
                   <span
                     className="dot-pulse h-3 w-3 rounded-full"
-                    style={{ background: "var(--accent)" }}
+                    style={{ background: "var(--lime-deep)" }}
                   />
                 ) : (
-                  <span className="h-3 w-3 rounded-full border border-[var(--panel-line)]" />
+                  <span className="h-3 w-3 rounded-full border border-[var(--border)]" />
                 )}
               </span>
               <span
                 className={
                   "text-sm " +
                   (isDone
-                    ? "text-[var(--paper)]"
+                    ? "text-[var(--ink)]"
                     : isActive
-                      ? "text-[var(--paper)]"
-                      : "text-[var(--muted)]")
+                      ? "text-[var(--ink)]"
+                      : "text-[var(--ink-45)]")
                 }
               >
                 {p.label}
@@ -83,7 +83,7 @@ export default function ProgressPanel({
       </ol>
 
       {!done && latestMessage && (
-        <p className="mt-4 truncate text-xs text-[var(--muted)] sm:hidden">
+        <p className="mt-4 truncate text-xs text-[var(--ink-45)] sm:hidden">
           {latestMessage}
         </p>
       )}

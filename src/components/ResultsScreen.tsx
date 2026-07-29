@@ -33,11 +33,11 @@ export default function ResultsScreen({ domain, brand, queries, visibility }: Pr
   return (
     <section className="fade-up">
       <h2 className="font-display text-2xl font-semibold sm:text-3xl">
-        Where <span style={{ color: "var(--accent)" }}>{domain}</span> shows
+        Where <span style={{ color: "var(--lime-deep)" }}>{domain}</span> shows
         up in AI answers
       </h2>
       {brand && (
-        <p className="mt-1 text-sm text-[var(--muted)]">
+        <p className="mt-1 text-sm text-[var(--ink-45)]">
           {brand.category} · for {brand.audience}
         </p>
       )}
@@ -51,8 +51,8 @@ export default function ResultsScreen({ domain, brand, queries, visibility }: Pr
 
       {allDone && visibleChecks === 0 && totalChecks > 0 && (
         <div
-          className="mt-4 rounded-xl border px-4 py-3 text-sm leading-snug"
-          style={{ borderColor: "rgba(255,107,107,0.35)", background: "rgba(255,107,107,0.08)" }}
+          className="mt-4 rounded-lg border px-4 py-3 text-sm leading-snug"
+          style={{ borderColor: "var(--danger-border)", background: "var(--danger-tint)" }}
         >
           Invisible on every engine, for all {total} questions buyers ask.
           Competitors are getting recommended instead.

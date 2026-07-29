@@ -45,17 +45,17 @@ export default function CtaCard({
 
   return (
     <section
-      className="fade-up rounded-2xl border p-6 text-center"
+      className="fade-up rounded-lg border p-6 text-center"
       style={{
-        borderColor: "rgba(198,242,78,0.3)",
+        borderColor: "var(--lime-border)",
         background:
-          "linear-gradient(180deg, rgba(198,242,78,0.06), rgba(198,242,78,0.02))",
+          "var(--lime-wash)"
       }}
     >
       <h3 className="font-display text-2xl font-semibold sm:text-3xl">
         Fix this before your competitors notice.
       </h3>
-      <p className="mx-auto mt-2 max-w-lg text-[15px] leading-relaxed text-[var(--muted)]">
+      <p className="mx-auto mt-2 max-w-lg text-[15px] leading-relaxed text-[var(--ink-45)]">
         {subhead}
       </p>
 
@@ -63,15 +63,15 @@ export default function CtaCard({
         <button
           type="button"
           onClick={() => setShowBooking(true)}
-          className="mt-5 inline-block rounded-xl px-6 py-3.5 text-[15px] font-semibold text-[var(--ink)] transition hover:brightness-105"
-          style={{ background: "var(--accent)" }}
+          className="mt-5 inline-block rounded-lg px-6 py-3.5 text-[15px] font-semibold text-[var(--ink)] transition hover:brightness-105"
+          style={{ background: "var(--lime)" }}
         >
           Book a 20-minute strategy call
         </button>
       )}
 
       {showBooking && (
-        <div className="mt-5 overflow-hidden rounded-xl border border-[var(--panel-line)] text-left">
+        <div className="mt-5 overflow-hidden rounded-lg border border-[var(--border)] text-left">
           {calLink ? (
             <Cal
               namespace={CAL_NAMESPACE}
@@ -84,7 +84,7 @@ export default function CtaCard({
               }}
             />
           ) : (
-            <p className="p-4 text-sm text-[var(--muted)]">
+            <p className="p-4 text-sm text-[var(--ink-45)]">
               Booking isn&apos;t configured yet. Set NEXT_PUBLIC_CAL_LINK to
               enable it.
             </p>
@@ -144,7 +144,7 @@ function AuditRequestCta({ domain, score }: { domain: string; score: string }) {
 
   if (done) {
     return (
-      <p className="mt-3 text-sm text-[var(--win)]">
+      <p className="mt-3 text-sm text-[var(--lime-deep)]">
         Done. Your full audit lands in your inbox within 24 hours.
       </p>
     );
@@ -155,7 +155,7 @@ function AuditRequestCta({ domain, score }: { domain: string; score: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mt-3 block w-full text-sm text-[var(--muted)] underline underline-offset-2 transition hover:text-[var(--paper)]"
+        className="mt-3 block w-full text-sm text-[var(--ink-45)] underline underline-offset-2 transition hover:text-[var(--ink)]"
       >
         Not ready to talk? Get the full 25-query audit by email.
       </button>
@@ -174,7 +174,7 @@ function AuditRequestCta({ domain, score }: { domain: string; score: string }) {
         placeholder="you@company.com"
         autoComplete="email"
         disabled={submitting}
-        className="w-full rounded-xl border border-[var(--panel-line)] bg-[var(--panel)] px-4 py-3 text-[15px] outline-none transition focus:border-[var(--accent)] disabled:opacity-60"
+        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-[15px] outline-none transition focus:border-[var(--lime)] disabled:opacity-60"
       />
       <input
         type="text"
@@ -183,14 +183,14 @@ function AuditRequestCta({ domain, score }: { domain: string; score: string }) {
         placeholder="Company name"
         autoComplete="organization"
         disabled={submitting}
-        className="w-full rounded-xl border border-[var(--panel-line)] bg-[var(--panel)] px-4 py-3 text-[15px] outline-none transition focus:border-[var(--accent)] disabled:opacity-60"
+        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-4 py-3 text-[15px] outline-none transition focus:border-[var(--lime)] disabled:opacity-60"
       />
-      {error && <p className="text-sm text-[var(--miss)]">{error}</p>}
+      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-xl px-4 py-3 text-[15px] font-semibold text-[var(--ink)] transition hover:brightness-105 disabled:opacity-60"
-        style={{ background: "var(--accent)" }}
+        className="w-full rounded-lg px-4 py-3 text-[15px] font-semibold text-[var(--ink)] transition hover:brightness-105 disabled:opacity-60"
+        style={{ background: "var(--lime)" }}
       >
         {submitting ? "Sending…" : "Send me the audit"}
       </button>

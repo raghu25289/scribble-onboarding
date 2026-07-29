@@ -3,8 +3,6 @@
 import type { PillarId, PillarScore, PillarScores } from "@/lib/types";
 import { bandColor } from "@/lib/severity";
 
-// "With Scribble" projection targets per pillar — illustrative, not a
-// guarantee (see the caption below the meters).
 const PILLAR_TARGETS: Record<PillarId, { target: number; note?: string }> = {
   onsite: { target: 70, note: "you can fix this today" },
   reviews: { target: 65 },
@@ -15,7 +13,7 @@ export default function CitationScoreSection({ pillars }: { pillars: PillarScore
   const rows: PillarScore[] = [pillars.onsite, pillars.reviews, pillars.thirdparty];
 
   return (
-    <section className="fade-up rounded-2xl border border-[var(--panel-line)] bg-[var(--panel)] p-6">
+    <section className="fade-up rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] p-6">
       <h3 className="font-display text-xl font-semibold sm:text-2xl">
         Why AI doesn&apos;t cite you
       </h3>
@@ -26,11 +24,11 @@ export default function CitationScoreSection({ pillars }: { pillars: PillarScore
         ))}
       </div>
 
-      <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">
+      <p className="mt-4 text-xs leading-relaxed text-[var(--ink-45)]">
         Typical progression over a 90-day creator program. Illustrative, based on past campaigns.
       </p>
 
-      <p className="mt-4 text-sm leading-relaxed text-[var(--muted)]">
+      <p className="mt-4 text-sm leading-relaxed text-[var(--ink-45)]">
         Your site you can fix. Independent voices citing you is what
         Scribble&apos;s creator network does.
       </p>
@@ -51,13 +49,13 @@ function PillarMeter({ pillar }: { pillar: PillarScore }) {
         </span>
       </div>
 
-      <div className="relative mt-1.5 h-2.5 w-full rounded-full bg-[var(--ink-soft)]">
+      <div className="relative mt-1.5 h-2.5 w-full rounded-sm bg-[var(--border)]">
         <div
-          className="absolute inset-y-0 left-0 rounded-full"
-          style={{ width: `${target}%`, background: "rgba(110,231,168,0.2)" }}
+          className="absolute inset-y-0 left-0 rounded-sm"
+          style={{ width: `${target}%`, background: "var(--lime-tint)" }}
         />
         <div
-          className="absolute inset-y-0 left-0 rounded-full transition-[width]"
+          className="absolute inset-y-0 left-0 rounded-sm"
           style={{ width: `${Math.max(2, pillar.score)}%`, background: color }}
         />
         <div
@@ -65,21 +63,21 @@ function PillarMeter({ pillar }: { pillar: PillarScore }) {
           style={{
             left: `${target}%`,
             top: "-3px",
-            borderLeft: "1.5px dashed var(--win)",
+            borderLeft: "1.5px dashed var(--lime-deep)",
           }}
         />
       </div>
 
       <div className="relative mt-1 h-3">
         <span
-          className="absolute -translate-x-1/2 whitespace-nowrap text-[10px] text-[var(--muted)]"
+          className="absolute -translate-x-1/2 whitespace-nowrap text-[10px] text-[var(--ink-45)]"
           style={{ left: `${target}%` }}
         >
           target{note ? ` (${note})` : ""}
         </span>
       </div>
 
-      <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">{pillar.gap}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-[var(--ink-45)]">{pillar.gap}</p>
     </div>
   );
 }

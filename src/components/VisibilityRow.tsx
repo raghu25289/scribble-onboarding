@@ -40,7 +40,7 @@ export default function VisibilityRow({ index, query, visibility, domain, produc
 
   return (
     <div
-      className="overflow-hidden rounded-xl border border-[var(--panel-line)] bg-[var(--panel)] fade-up"
+      className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] fade-up"
       style={{ animationDelay: `${index * 40}ms`, borderLeft: `3px solid ${severityColor(agg)}` }}
     >
       <button
@@ -52,7 +52,7 @@ export default function VisibilityRow({ index, query, visibility, domain, produc
         <p className="min-w-0 truncate pr-2 text-[15px] font-medium leading-snug">{query}</p>
         <EngineChips visibility={visibility} />
         <svg
-          className="mx-auto h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform duration-200"
+          className="mx-auto h-3.5 w-3.5 shrink-0 text-[var(--ink-45)] transition-transform duration-200"
           style={{ transform: showWhy ? "rotate(180deg)" : "none" }}
           viewBox="0 0 24 24"
           fill="none"
@@ -66,23 +66,23 @@ export default function VisibilityRow({ index, query, visibility, domain, produc
       <div className="px-4 pb-4">
         {tagged.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-[var(--muted)]">{label}</span>
+            <span className="text-xs text-[var(--ink-45)]">{label}</span>
             {visibleChips.map((w, i) => (
               <span
                 key={i}
                 className={
-                  "rounded-md border px-2 py-0.5 text-xs " +
+                  "rounded-lg border px-2 py-0.5 text-xs " +
                   (w.isBrand
-                    ? "border-transparent bg-[rgba(110,231,168,0.14)] text-[var(--win)]"
-                    : "border-[var(--panel-line)] bg-[var(--ink-soft)]")
+                    ? "border-transparent bg-[var(--lime-tint)] text-[var(--lime-deep)]"
+                    : "border-[var(--border)] bg-[var(--bg-subtle)]")
                 }
               >
                 {w.isBrand && (
-                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[var(--win)]" />
+                  <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-[var(--lime-deep)]" />
                 )}
                 {w.name}
                 {!w.verified && (
-                  <span className="ml-1 text-[9px] text-[var(--muted)]">unverified</span>
+                  <span className="ml-1 text-[9px] text-[var(--ink-45)]">unverified</span>
                 )}
               </span>
             ))}
@@ -90,7 +90,7 @@ export default function VisibilityRow({ index, query, visibility, domain, produc
               <button
                 type="button"
                 onClick={() => setShowAllChips(true)}
-                className="rounded-md border border-[var(--panel-line)] bg-[var(--ink-soft)] px-2 py-0.5 text-xs text-[var(--muted)]"
+                className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-2 py-0.5 text-xs text-[var(--ink-45)]"
               >
                 +{overflowCount} more
               </button>
@@ -99,7 +99,7 @@ export default function VisibilityRow({ index, query, visibility, domain, produc
         )}
 
         {showWhy && web?.ok && (
-          <p className="mt-2.5 text-sm leading-relaxed text-[var(--muted)]">
+          <p className="mt-2.5 text-sm leading-relaxed text-[var(--ink-45)]">
             {firstTwoSentences(web.snippet)}
           </p>
         )}

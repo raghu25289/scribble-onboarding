@@ -20,7 +20,7 @@ export default function ShareReportButton({ reportToken }: { reportToken: string
     <button
       type="button"
       onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--panel-line)] px-3 py-1.5 text-xs font-medium text-[var(--paper)] transition hover:border-[var(--accent)]"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--ink)] transition hover:border-[var(--lime-deep)]"
     >
       {copied ? "Copied!" : "Share report"}
     </button>

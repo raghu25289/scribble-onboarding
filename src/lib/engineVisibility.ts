@@ -48,9 +48,9 @@ export function aggregateQuery(qv: QueryVisibility): QueryAggregate {
 // invisible everywhere checked, green when visible everywhere, amber for a
 // mixed result.
 export function severityColor(agg: QueryAggregate): string {
-  if (agg.checkedCount === 0 || agg.visibleCount === 0) return "var(--miss)";
-  if (agg.visibleCount === agg.checkedCount) return "var(--win)";
-  return "var(--amber)";
+  if (agg.checkedCount === 0 || agg.visibleCount === 0) return "var(--danger)";
+  if (agg.visibleCount === agg.checkedCount) return "var(--lime-deep)";
+  return "var(--ink)";
 }
 
 // The new headline score: visible engine-checks out of total engine-checks
