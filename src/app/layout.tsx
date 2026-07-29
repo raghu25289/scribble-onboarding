@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+// Needed for report pages' OG image tags to resolve to an absolute URL.
+// Falls back through an explicit public var, then Vercel's runtime host,
+// then localhost for `next dev`.
+const siteUrl =
+  process.env.NEXT_PUBLIC_BASE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Scribble: See how AI answers about your brand",
   description:
     "Scribble shows whether AI assistants recommend your brand when buyers ask. Enter your site and see who wins your highest-intent queries today.",

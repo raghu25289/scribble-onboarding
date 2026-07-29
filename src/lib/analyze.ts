@@ -13,9 +13,11 @@ import { createCostTracker, formatCostBreakdown } from "./cost";
 import { generateJson } from "./openrouter";
 import { fetchSiteContent } from "./scrape";
 import { checkEngineVisibility, fetchWebSearch } from "./engines";
-import { store, makeId } from "./store";
+import { store, makeId, makeReportToken } from "./store";
 import { deriveClassification, resolvePriceConfidence } from "./classification";
 import { assessOnsite, assessReviewSites, assessThirdParty, runAnchoredPillarSearches } from "./pillars";
+import { aggregateQuery, computeHeadlineScore } from "./engineVisibility";
+import { generateReportInsights } from "./reportInsights";
 import {
   BRAND_UNDERSTANDING_SYSTEM,
   brandUnderstandingPrompt,
@@ -139,6 +141,8 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
     arpu: null,
     pillars: null,
     completedAt: "",
+    reportToken: makeReportToken(),
+    reportInsights: null,
   };
 
   const tracker = createCostTracker();
@@ -423,11 +427,39 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   record.arpu = arpu;
   record.pillars = pillars;
 
+  // ── Step: generate report-only insights (benchmark + three moves) ─────────
+  // Best-effort and non-fatal: the shareable report page falls back to static
+  // copy derived from `pillars` alone when this is null. Runs once, here, so
+  // the report page never re-calls the model on page view.
+  if (pillars) {
+    try {
+      const { visible, total } = computeHeadlineScore(queryVisibilities);
+      const headlineScorePct = total > 0 ? Math.round((visible / total) * 100) : 0;
+      const invisibleQueries = queryVisibilities
+        .map((qv) => ({ query: qv.query, agg: aggregateQuery(qv) }))
+        .filter((r) => r.agg.invisible)
+        .map((r) => ({ query: r.query, winners: r.agg.winners.map((w) => w.name) }));
+
+      record.reportInsights = await generateReportInsights({
+        domain: lead.domain,
+        category: brand.category,
+        brandProduct: brand.product,
+        headlineScorePct,
+        pillars,
+        invisibleQueries,
+        topCompetitors: brand.topCompetitors,
+        tracker,
+      });
+    } catch (e) {
+      console.error("[Scribble] report insights generation failed:", (e as Error).message);
+    }
+  }
+
   // ── Step: log the completed onboarding ─────────────────────────────────────
   record.completedAt = new Date().toISOString();
   await store.logOnboarding(record);
   console.log(
     `[Scribble] audit cost estimate for ${lead.domain}: $${tracker.total().toFixed(4)} (${formatCostBreakdown(tracker)})`
   );
-  emit({ type: "done", onboardingId: record.id });
+  emit({ type: "done", onboardingId: record.id, reportToken: record.reportToken });
 }

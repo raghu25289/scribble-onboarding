@@ -16,6 +16,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
+import { randomBytes } from "crypto";
 import { Redis } from "@upstash/redis";
 import { config } from "./config";
 import type { AuditRequest, Lead, OnboardingRecord } from "./types";
@@ -24,6 +25,8 @@ export interface LeadStore {
   createLead(input: Omit<Lead, "id" | "createdAt">): Promise<Lead>;
   getLead(id: string): Promise<Lead | null>;
   logOnboarding(record: OnboardingRecord): Promise<void>;
+  getOnboarding(id: string): Promise<OnboardingRecord | null>;
+  getOnboardingByToken(token: string): Promise<OnboardingRecord | null>;
   listLeads(): Promise<Lead[]>;
   listOnboardings(): Promise<OnboardingRecord[]>;
   logAuditRequest(input: Omit<AuditRequest, "id" | "createdAt">): Promise<AuditRequest>;
@@ -34,6 +37,14 @@ function id(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Crypto-random slug for the public /report/{token} page. Separate from
+// id() above: that scheme embeds a timestamp and a few bits of Math.random,
+// fine for internal ids nobody guesses on purpose, but a link forwarded
+// around WhatsApp/Slack needs real unguessability.
+export function makeReportToken(): string {
+  return randomBytes(12).toString("base64url");
+}
+
 // ── Redis keys ───────────────────────────────────────────────────────────────
 // Each lead lives at `lead:{id}` (the id embeds its creation timestamp), and its
 // id is pushed onto the `leads:index` list so all leads can be read back in
@@ -42,6 +53,9 @@ const LEAD_KEY = (leadId: string) => `lead:${leadId}`;
 const LEADS_INDEX = "leads:index";
 const ONBOARDING_KEY = (onbId: string) => `onboarding:${onbId}`;
 const ONBOARDINGS_INDEX = "onboardings:index";
+// Secondary index: report token -> onboarding id, so the report page can look
+// an onboarding up by its public token without scanning the whole index.
+const REPORT_TOKEN_KEY = (token: string) => `reportToken:${token}`;
 const AUDIT_REQUEST_KEY = (reqId: string) => `auditRequest:${reqId}`;
 const AUDIT_REQUESTS_INDEX = "auditRequests:index";
 
@@ -87,10 +101,33 @@ class RedisStore implements LeadStore {
     try {
       await this.redis.set(ONBOARDING_KEY(record.id), record);
       await this.redis.rpush(ONBOARDINGS_INDEX, record.id);
+      if (record.reportToken) {
+        await this.redis.set(REPORT_TOKEN_KEY(record.reportToken), record.id);
+      }
     } catch (e) {
       console.error("[store:redis] failed to persist onboarding:", (e as Error).message);
     }
     console.log("[onboarding]", JSON.stringify(record));
+  }
+
+  async getOnboarding(onbId: string): Promise<OnboardingRecord | null> {
+    try {
+      return (await this.redis.get<OnboardingRecord>(ONBOARDING_KEY(onbId))) ?? null;
+    } catch (e) {
+      console.error("[store:redis] failed to read onboarding:", (e as Error).message);
+      return null;
+    }
+  }
+
+  async getOnboardingByToken(token: string): Promise<OnboardingRecord | null> {
+    try {
+      const onbId = await this.redis.get<string>(REPORT_TOKEN_KEY(token));
+      if (!onbId) return null;
+      return this.getOnboarding(onbId);
+    } catch (e) {
+      console.error("[store:redis] failed to read onboarding by token:", (e as Error).message);
+      return null;
+    }
   }
 
   async listLeads(): Promise<Lead[]> {
@@ -215,6 +252,16 @@ class JsonFileStore implements LeadStore {
     }
     // Always log the full completed onboarding for lead review.
     console.log("[onboarding]", JSON.stringify(record));
+  }
+
+  async getOnboarding(onbId: string): Promise<OnboardingRecord | null> {
+    const records = await readJsonArray<OnboardingRecord>(this.onboardingsFile);
+    return records.find((r) => r.id === onbId) || null;
+  }
+
+  async getOnboardingByToken(token: string): Promise<OnboardingRecord | null> {
+    const records = await readJsonArray<OnboardingRecord>(this.onboardingsFile);
+    return records.find((r) => r.reportToken === token) || null;
   }
 
   async listLeads(): Promise<Lead[]> {

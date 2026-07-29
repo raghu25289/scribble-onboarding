@@ -302,6 +302,63 @@ Return:
 - gap: one sentence naming the biggest gap (e.g. "absent from every 'best of' listicle found", "only mentioned once, in a low-authority blog post").`;
 }
 
+// ── 8. REPORT INSIGHTS (shareable report page) ──────────────────────────────
+// Generated once at audit-completion time and stored on the record — the
+// public /report/{token} page reads this back statically, it never re-runs
+// this call. Produces the category benchmark bars and the "three moves"
+// card, both scoped to this specific brand's actual gaps and queries.
+export const REPORT_INSIGHTS_SYSTEM = `You turn one brand's AI-visibility audit into two things for a client-facing report: a category benchmark estimate, and exactly three concrete next moves.
+You write like a sharp, honest consultant, not a marketer. Specific beats generic every time — reference the brand's actual gaps, queries, and competitors, never generic advice that could apply to any company.
+Never write the word "Scribble" anywhere in your output; the report names Scribble elsewhere, your job is just the analysis.
+Never use an em dash or en dash character anywhere in your output. Use a comma or a period instead.`;
+
+export function reportInsightsPrompt(input: {
+  domain: string;
+  category: string;
+  brandProduct: string;
+  headlineScorePct: number;
+  pillars: { id: string; label: string; score: number; gap: string }[];
+  invisibleQueries: { query: string; winners: string[] }[];
+  topCompetitors: string[];
+}): string {
+  const pillarLines = input.pillars
+    .map((p) => `- ${p.label} (${p.id}): ${p.score}/100. Gap: ${p.gap}`)
+    .join("\n");
+  const invisibleLines =
+    input.invisibleQueries
+      .slice(0, 8)
+      .map(
+        (q) =>
+          `- "${q.query}"${q.winners.length ? ` — recommended instead: ${q.winners.join(", ")}` : ""}`
+      )
+      .join("\n") || "(none — the brand is visible on every checked query)";
+
+  return `Brand: ${input.domain}
+What it does: ${input.brandProduct}
+Category: ${input.category}
+Overall AI-answer visibility today: ${input.headlineScorePct}% of engine checks mention this brand.
+Known competitors: ${input.topCompetitors.join(", ") || "none identified"}
+
+Pillar scores (0-100, how citable each channel is for this brand):
+${pillarLines}
+
+Queries where the brand is currently invisible:
+${invisibleLines}
+
+Produce two things.
+
+1. benchmark: your best estimate of AI-answer visibility percentages for this specific category, based on how competitive and well-covered it typically is:
+   - leaderPct: a plausible visibility percentage for the category's leading brands (the ones AI assistants cite most).
+   - medianPct: a plausible visibility percentage for a typical mid-pack brand in this category.
+   Both numbers must be strictly greater than or equal to ${input.headlineScorePct} (this brand's own score) — the point is showing this brand behind the pack, never ahead of it. Keep the numbers realistic for the category, not inflated.
+
+2. moves: EXACTLY three cards, in this order, each with a title (6 words max), description (25 words max, plain sentence, no marketing fluff), an impact tag, and which pillar it targets:
+   - Move 1: the single biggest ONSITE gap (pillar "onsite"), phrased as something this brand's team can start doing today, no external help needed. impact should usually be "fast_win" or "high_leverage".
+   - Move 2 and Move 3: target whichever of "reviews" and "thirdparty" score lowest for this brand (both if both are weak). Each must reference independent creator or third-party coverage as the mechanism that closes the gap, e.g. getting real people/publications who aren't the brand itself to write or talk about it. Do not say how to get that coverage or name any vendor, just that it's the mechanism. impact should usually be "compounding" for these, or "high_leverage" if the gap is severe.
+
+Ground every move in the actual pillar gaps and invisible queries above, not generic advice.`;
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 function truncate(s: string, max: number): string {
   if (!s) return "";

@@ -153,6 +153,32 @@ export interface OnboardingRecord {
   arpu: ArpuVerdict | null;
   pillars: PillarScores | null;
   completedAt: string;
+  // Crypto-random, unguessable slug for the public /report/{token} page —
+  // deliberately not the id() scheme above (timestamp + short random, fine
+  // for internal ids, guessable enough to matter for a public link).
+  reportToken: string;
+  reportInsights: ReportInsights | null;
+}
+
+// The category benchmark + "three moves" shown on the shareable report page.
+// Generated once, at audit-completion time, and stored here so a forwarded
+// report link stays static (no LLM call on every page view). Null when the
+// generation call failed — the report page falls back to static copy.
+export interface ReportInsights {
+  benchmark: {
+    leaderPct: number; // estimated visibility % for category leaders
+    medianPct: number; // estimated visibility % for the category median
+  };
+  moves: [ReportMove, ReportMove, ReportMove];
+}
+
+export type ReportMoveImpact = "high_leverage" | "fast_win" | "compounding";
+
+export interface ReportMove {
+  title: string; // max 6 words
+  description: string; // max 25 words
+  impact: ReportMoveImpact;
+  pillar: PillarId;
 }
 
 // ─── Streaming event protocol (NDJSON over the analyze route) ────────────────
@@ -165,7 +191,7 @@ export type AnalyzeEvent =
   | { type: "engine_result"; queryIndex: number; total: number; engine: EngineId; data: EngineCheckResult }
   | { type: "arpu"; data: ArpuVerdict }
   | { type: "pillars"; data: PillarScores }
-  | { type: "done"; onboardingId: string }
+  | { type: "done"; onboardingId: string; reportToken: string }
   | { type: "error"; step: AnalyzeStep; message: string; fatal: boolean };
 
 export type AnalyzeStep =

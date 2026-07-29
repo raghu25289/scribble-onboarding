@@ -8,6 +8,7 @@ import ArpuCard from "./ArpuCard";
 import CostCard from "./CostCard";
 import CitationScoreSection from "./CitationScoreSection";
 import CtaCard from "./CtaCard";
+import ShareReportButton from "./ShareReportButton";
 import { topCompetitor } from "@/lib/costEstimate";
 import { aggregateQuery, computeHeadlineScore, isQueryFullyChecked } from "@/lib/engineVisibility";
 import type {
@@ -35,6 +36,7 @@ export default function OnboardingFlow() {
   const [visibility, setVisibility] = useState<QueryVisibility[]>([]);
   const [arpu, setArpu] = useState<ArpuVerdict | null>(null);
   const [pillars, setPillars] = useState<PillarScores | null>(null);
+  const [reportToken, setReportToken] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
 
   const startedRef = useRef(false);
@@ -89,6 +91,7 @@ export default function OnboardingFlow() {
         case "done":
           setPhase("done");
           setActiveStep(null);
+          setReportToken(ev.reportToken);
           break;
         case "error":
           if (ev.fatal) {
@@ -227,12 +230,19 @@ export default function OnboardingFlow() {
       )}
 
       {showResults && (
-        <ResultsScreen
-          domain={domain}
-          brand={brand}
-          queries={queries}
-          visibility={visibility}
-        />
+        <>
+          {reportToken && (
+            <div className="flex justify-end">
+              <ShareReportButton reportToken={reportToken} />
+            </div>
+          )}
+          <ResultsScreen
+            domain={domain}
+            brand={brand}
+            queries={queries}
+            visibility={visibility}
+          />
+        </>
       )}
 
       {arpu && <ArpuCard arpu={arpu} />}

@@ -176,6 +176,15 @@ export function computeCostBreakdown<T extends { demand: QueryWithDemand }>(
   };
 }
 
+// Conservative (band-low) total monthly AI-ask volume across every generated
+// query, regardless of visibility — the report hero's "{n} buyers a month are
+// asking" line. Same fixed DEMAND_BANDS used everywhere else in this file, no
+// separate volume model.
+export function estimateMonthlyAskVolume(queries: { demandTier: DemandTier }[]): number {
+  const total = queries.reduce((sum, q) => sum + DEMAND_BANDS[q.demandTier].low, 0);
+  return round2SigFigs(total);
+}
+
 // Shortens a query for the infographic's per-bar label.
 export function truncateLabel(text: string, max = 48): string {
   return text.length > max ? text.slice(0, max - 1).trimEnd() + "…" : text;
