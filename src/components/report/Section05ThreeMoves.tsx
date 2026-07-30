@@ -14,7 +14,7 @@ export default function Section05ThreeMoves({ view }: { view: ReportViewModel })
   return (
     <section className="rp-slide">
       <div className="rp-container">
-        <span className="rp-index">05</span>
+        <span className="rp-index">04</span>
         <h2 className="rp-h2">Three moves that change this fastest</h2>
         <p className="rp-context">Specific to your actual gaps, not generic advice.</p>
       </div>

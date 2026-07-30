@@ -51,11 +51,11 @@ export interface ReportViewModel {
   completedAt: string;
   category: string;
   token: string;
-  // Masthead + key findings + where-you-stand + CTA finale always render;
-  // where-buyers-go / what-it-costs / why-AI-skips-you / three-moves each
-  // collapse when their data is missing. The slide-nav dot count and the
-  // download's static dot markup both read this so they never drift from
-  // what page.tsx actually renders.
+  // Cover (masthead + key findings) + where-you-stand + CTA finale always
+  // render; buyers-and-costs / why-AI-skips-you / three-moves each collapse
+  // when their data is missing. The slide-nav dot count and the download's
+  // static dot markup both read this so they never drift from what
+  // page.tsx actually renders.
   slideCount: number;
 
   scorePct: number;
@@ -83,9 +83,6 @@ export interface ReportViewModel {
   framingLine: string;
 
   moves: [ReportMove, ReportMove, ReportMove] | null;
-
-  calLink: string | undefined;
-  contactEmail: string;
 }
 
 export function computeReportViewModel(record: OnboardingRecord): ReportViewModel {
@@ -172,13 +169,9 @@ export function computeReportViewModel(record: OnboardingRecord): ReportViewMode
 
   const moves = record.reportInsights?.moves ?? (record.pillars ? fallbackReportMoves(record.pillars) : null);
 
-  // Masthead, key findings, where-you-stand, CTA finale.
-  const slideCount =
-    4 +
-    (competitorBars.length > 0 ? 1 : 0) +
-    (hasRisk ? 1 : 0) +
-    (pillars ? 1 : 0) +
-    (moves ? 1 : 0);
+  // Cover (masthead + key findings), where-you-stand, CTA finale.
+  const hasBuyersOrCosts = competitorBars.length > 0 || hasRisk;
+  const slideCount = 3 + (hasBuyersOrCosts ? 1 : 0) + (pillars ? 1 : 0) + (moves ? 1 : 0);
 
   return {
     domain: record.domain,
@@ -206,7 +199,5 @@ export function computeReportViewModel(record: OnboardingRecord): ReportViewMode
     framingLine:
       "Your site you can fix. Independent voices citing you is what Scribble's creator network does.",
     moves,
-    calLink: process.env.NEXT_PUBLIC_CAL_LINK,
-    contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || "hello@scribble.xyz",
   };
 }

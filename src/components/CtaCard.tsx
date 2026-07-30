@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Cal, { getCalApi } from "@calcom/embed-react";
+import { useState } from "react";
 import { isValidEmail } from "@/lib/validate";
-
-const CAL_NAMESPACE = "strategy-call";
+import { BOOKING_URL, contactMailtoHref } from "@/lib/contact";
 
 interface Props {
   domain: string; // used as the brand name in copy
@@ -20,24 +18,7 @@ export default function CtaCard({
   topInvisibleCompetitor,
 }: Props) {
   const hasInvisible = visibleCount < total;
-  const calLink = process.env.NEXT_PUBLIC_CAL_LINK;
   const score = `${visibleCount}/${total}`;
-
-  const [showBooking, setShowBooking] = useState(false);
-
-  useEffect(() => {
-    if (!showBooking) return;
-    if (!calLink) {
-      console.warn(
-        "[CtaCard] NEXT_PUBLIC_CAL_LINK is not set; skipping Cal.com embed init."
-      );
-      return;
-    }
-    (async function () {
-      const cal = await getCalApi({ namespace: CAL_NAMESPACE });
-      cal("ui", { theme: "dark" });
-    })();
-  }, [showBooking, calLink]);
 
   const subhead = hasInvisible
     ? `AI changes weekly. ${topInvisibleCompetitor ?? "A competitor"} is winning these questions right now.`
@@ -59,38 +40,21 @@ export default function CtaCard({
         {subhead}
       </p>
 
-      {!showBooking && (
-        <button
-          type="button"
-          onClick={() => setShowBooking(true)}
-          className="mt-5 inline-block rounded-lg px-6 py-3.5 text-[15px] font-semibold text-[var(--ink)] transition hover:brightness-105"
-          style={{ background: "var(--lime)" }}
-        >
-          Book a 20-minute strategy call
-        </button>
-      )}
-
-      {showBooking && (
-        <div className="mt-5 overflow-hidden rounded-lg border border-[var(--border)] text-left">
-          {calLink ? (
-            <Cal
-              namespace={CAL_NAMESPACE}
-              calLink={calLink}
-              style={{ width: "100%", height: "600px", overflow: "scroll" }}
-              config={{
-                theme: "dark",
-                "metadata[brandUrl]": domain,
-                "metadata[visibilityScore]": score,
-              }}
-            />
-          ) : (
-            <p className="p-4 text-sm text-[var(--ink-45)]">
-              Booking isn&apos;t configured yet. Set NEXT_PUBLIC_CAL_LINK to
-              enable it.
-            </p>
-          )}
-        </div>
-      )}
+      <a
+        href={BOOKING_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-5 inline-block rounded-lg px-6 py-3.5 text-[15px] font-semibold text-[var(--ink)] transition hover:brightness-105"
+        style={{ background: "var(--lime)" }}
+      >
+        Book a 20-minute strategy call
+      </a>
+      <a
+        href={contactMailtoHref(domain)}
+        className="mt-3 block text-sm text-[var(--ink-45)] underline underline-offset-2 transition hover:text-[var(--ink)]"
+      >
+        Or email us directly
+      </a>
 
       <AuditRequestCta domain={domain} score={score} />
     </section>

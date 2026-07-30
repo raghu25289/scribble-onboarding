@@ -5,13 +5,11 @@ import { computeReportViewModel } from "@/lib/reportView";
 import ReportHeader from "@/components/report/ReportHeader";
 import SlideNav from "@/components/report/SlideNav";
 import Masthead from "@/components/report/Masthead";
-import KeyFindingsStrip from "@/components/report/KeyFindingsStrip";
 import Section01WhereYouStand from "@/components/report/Section01WhereYouStand";
-import Section02WhereBuyersGo from "@/components/report/Section02WhereBuyersGo";
-import Section03WhatItCosts from "@/components/report/Section03WhatItCosts";
+import Section02BuyersAndCosts from "@/components/report/Section02BuyersAndCosts";
 import Section04WhyAISkipsYou from "@/components/report/Section04WhyAISkipsYou";
 import Section05ThreeMoves from "@/components/report/Section05ThreeMoves";
-import CtaFinaleLive from "@/components/report/CtaFinaleLive";
+import CtaFinale from "@/components/report/CtaFinale";
 
 interface Props {
   params: Promise<{ token: string }>;
@@ -49,14 +47,12 @@ export default async function ReportPage({ params }: Props) {
       <ReportHeader token={token} />
       <SlideNav slideCount={view.slideCount} />
       <div className="rp-slideshow">
-        <Masthead domain={view.domain} completedAt={view.completedAt} category={view.category} />
-        <KeyFindingsStrip view={view} isStatic={false} />
+        <Masthead view={view} isStatic={false} />
         <Section01WhereYouStand view={view} isStatic={false} />
-        <Section02WhereBuyersGo view={view} isStatic={false} />
-        <Section03WhatItCosts view={view} isStatic={false} />
+        <Section02BuyersAndCosts view={view} isStatic={false} />
         <Section04WhyAISkipsYou view={view} isStatic={false} />
         <Section05ThreeMoves view={view} />
-        <CtaFinaleLive view={view} />
+        <CtaFinale view={view} />
       </div>
     </div>
   );

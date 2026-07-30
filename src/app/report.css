@@ -113,6 +113,23 @@
   color: #ffffff;
 }
 
+/* Cover slide (identity + key findings merged): identity above, key
+   findings below it with a capped (not viewport-filling) gap, the pair
+   centered as one group like every other slide — avoids a large void
+   forming above or below on tall viewports. */
+.rp-cover-findings {
+  margin-top: clamp(40px, 16vh, 140px);
+}
+/* The cover carries the abstract, so its stats read larger and roomier
+   than the same strip would elsewhere — real content filling the slide
+   instead of whitespace doing the work. */
+.rp-slide-cover .rp-stat {
+  padding: 32px 24px;
+}
+.rp-slide-cover .rp-stat-value {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+}
+
 @media (max-width: 700px) {
   .rp-slideshow {
     height: 100svh;
@@ -244,6 +261,11 @@
   font-size: 14px;
   color: var(--ink-45);
 }
+/* One size step down from .rp-domain — the cover slide now shares its
+   space with the key-findings strip below it. */
+.rp-domain-compact {
+  font-size: clamp(2.5rem, 7.5vw, 4.75rem);
+}
 
 /* ── Key findings strip ─────────────────────────────────────────────────── */
 .rp-stats {
@@ -359,7 +381,21 @@
   background: var(--border);
 }
 
-/* ── 02. Competitor bar chart ────────────────────────────────────────────── */
+/* ── 02. Buyers-go + what-it-costs split (two columns on desktop) ──────── */
+.rp-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+}
+@media (max-width: 780px) {
+  .rp-split {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+/* ── Competitor bar chart ────────────────────────────────────────────────── */
 .rp-bars {
   margin-top: 8px;
 }
@@ -403,7 +439,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 03. Cost section ────────────────────────────────────────────────────── */
+/* ── 02. Cost section (right column) ────────────────────────────────────── */
 .rp-cost-hero {
   font-weight: 800;
   font-size: clamp(2.25rem, 6vw, 3.5rem);
@@ -490,7 +526,7 @@
   background: var(--lime-deep-85);
 }
 
-/* ── 04. Pillar meters ────────────────────────────────────────────────────── */
+/* ── 03. Pillar meters ────────────────────────────────────────────────────── */
 .rp-pillar {
   margin-bottom: 28px;
 }
@@ -553,7 +589,7 @@
   max-width: 60ch;
 }
 
-/* ── 05. Three moves ─────────────────────────────────────────────────────── */
+/* ── 04. Three moves ─────────────────────────────────────────────────────── */
 .rp-moves {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -623,6 +659,7 @@
 }
 .rp-cta-button {
   display: inline-block;
+  align-self: center;
   margin-top: 32px;
   padding: 14px 28px;
   background: var(--lime);
@@ -645,6 +682,7 @@
 }
 .rp-cta-secondary {
   display: block;
+  align-self: center;
   margin-top: 16px;
   font-size: 13px;
   color: color-mix(in srgb, #ffffff 60%, transparent);
@@ -679,7 +717,7 @@
   }
 }
 
-/* ── Print: snap off, one slide per page — an 8-page deck ───────────────── */
+/* ── Print: snap off, one slide per page — a 6-page deck ─────────────────── */
 @media print {
   .rp-page,
   .rp-page * {

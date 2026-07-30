@@ -18,7 +18,7 @@ export default function Section04WhyAISkipsYou({ view, isStatic }: { view: Repor
   return (
     <section className="rp-slide">
       <div className="rp-container">
-        <span className="rp-index">04</span>
+        <span className="rp-index">03</span>
         <h2 className="rp-h2">Why AI skips you</h2>
         <p className="rp-context">The three channels AI actually pulls citations from.</p>
 

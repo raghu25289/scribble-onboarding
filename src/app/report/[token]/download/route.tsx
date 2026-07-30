@@ -3,13 +3,11 @@ import path from "path";
 import { store } from "@/lib/store";
 import { computeReportViewModel } from "@/lib/reportView";
 import Masthead from "@/components/report/Masthead";
-import KeyFindingsStrip from "@/components/report/KeyFindingsStrip";
 import Section01WhereYouStand from "@/components/report/Section01WhereYouStand";
-import Section02WhereBuyersGo from "@/components/report/Section02WhereBuyersGo";
-import Section03WhatItCosts from "@/components/report/Section03WhatItCosts";
+import Section02BuyersAndCosts from "@/components/report/Section02BuyersAndCosts";
 import Section04WhyAISkipsYou from "@/components/report/Section04WhyAISkipsYou";
 import Section05ThreeMoves from "@/components/report/Section05ThreeMoves";
-import CtaFinaleStatic from "@/components/report/CtaFinaleStatic";
+import CtaFinale from "@/components/report/CtaFinale";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -76,12 +74,13 @@ const SLIDE_NAV_SCRIPT = `(function () {
 
 // A fully self-contained, static export of the report: all CSS inlined, all
 // data baked in at final values. Must render perfectly from a double-click
-// on disk with no network — so it never touches the Cal.com embed (see
-// CtaFinaleStatic) and reads report.css raw rather than relying on Next's
-// compiled Tailwind bundle, which this page doesn't use at all. The one
-// exception to "no JS" is the slideshow nav script above, hand-written
-// vanilla JS with no dependencies, needed for keyboard nav + the dot
-// indicator to work offline exactly like the live page.
+// on disk with no network — the CTA's booking/email links are plain <a>
+// tags (no embed, no third-party script), and this reads report.css raw
+// rather than relying on Next's compiled Tailwind bundle, which this page
+// doesn't use at all. The one exception to "no JS" is the slideshow nav
+// script above, hand-written vanilla JS with no dependencies, needed for
+// keyboard nav + the dot indicator to work offline exactly like the live
+// page.
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const record = await store.getOnboardingByToken(token);
@@ -102,14 +101,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
   const bodyMarkup = renderToStaticMarkup(
     <div className="rp-page">
       <div className="rp-slideshow">
-        <Masthead domain={view.domain} completedAt={view.completedAt} category={view.category} />
-        <KeyFindingsStrip view={view} isStatic={true} />
+        <Masthead view={view} isStatic={true} />
         <Section01WhereYouStand view={view} isStatic={true} />
-        <Section02WhereBuyersGo view={view} isStatic={true} />
-        <Section03WhatItCosts view={view} isStatic={true} />
+        <Section02BuyersAndCosts view={view} isStatic={true} />
         <Section04WhyAISkipsYou view={view} isStatic={true} />
         <Section05ThreeMoves view={view} />
-        <CtaFinaleStatic view={view} />
+        <CtaFinale view={view} />
       </div>
       <nav className="rp-slide-nav" aria-label="Report sections">
         {Array.from({ length: view.slideCount }).map((_, i) => (
