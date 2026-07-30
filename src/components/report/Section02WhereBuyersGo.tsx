@@ -6,7 +6,7 @@ export default function Section02WhereBuyersGo({ view, isStatic }: { view: Repor
   if (competitorBars.length === 0) return null;
 
   return (
-    <section className="rp-section">
+    <section className="rp-slide">
       <div className="rp-container">
         <span className="rp-index">02</span>
         <h2 className="rp-h2">Where buyers go instead</h2>

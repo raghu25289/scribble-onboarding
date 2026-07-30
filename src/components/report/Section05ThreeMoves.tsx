@@ -12,7 +12,7 @@ export default function Section05ThreeMoves({ view }: { view: ReportViewModel })
   if (!moves) return null;
 
   return (
-    <section className="rp-section">
+    <section className="rp-slide">
       <div className="rp-container">
         <span className="rp-index">05</span>
         <h2 className="rp-h2">Three moves that change this fastest</h2>

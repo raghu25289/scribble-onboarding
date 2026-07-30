@@ -51,6 +51,12 @@ export interface ReportViewModel {
   completedAt: string;
   category: string;
   token: string;
+  // Masthead + key findings + where-you-stand + CTA finale always render;
+  // where-buyers-go / what-it-costs / why-AI-skips-you / three-moves each
+  // collapse when their data is missing. The slide-nav dot count and the
+  // download's static dot markup both read this so they never drift from
+  // what page.tsx actually renders.
+  slideCount: number;
 
   scorePct: number;
   scoreColor: string;
@@ -166,11 +172,20 @@ export function computeReportViewModel(record: OnboardingRecord): ReportViewMode
 
   const moves = record.reportInsights?.moves ?? (record.pillars ? fallbackReportMoves(record.pillars) : null);
 
+  // Masthead, key findings, where-you-stand, CTA finale.
+  const slideCount =
+    4 +
+    (competitorBars.length > 0 ? 1 : 0) +
+    (hasRisk ? 1 : 0) +
+    (pillars ? 1 : 0) +
+    (moves ? 1 : 0);
+
   return {
     domain: record.domain,
     completedAt: record.completedAt,
     category,
     token: record.reportToken,
+    slideCount,
     scorePct,
     scoreColor,
     visibleChecks,

@@ -19,6 +19,11 @@
   --ink-70: color-mix(in srgb, var(--ink) 70%, transparent);
   --lime-60: color-mix(in srgb, var(--lime) 60%, transparent);
   --lime-tint: color-mix(in srgb, var(--lime) 18%, var(--bg));
+  /* Meaningful green data on light backgrounds always reads through
+     --lime-deep, never bare --lime (too low-contrast on white). This is the
+     "solid, not washy" recoverable-overlay tone. */
+  --lime-deep-85: color-mix(in srgb, var(--lime-deep) 85%, transparent);
+  --lime-deep-tint: color-mix(in srgb, var(--lime-deep) 15%, var(--bg));
   --danger-tint: color-mix(in srgb, var(--danger) 8%, var(--bg));
   --danger-border: color-mix(in srgb, var(--danger) 35%, transparent);
   --lime-wash: color-mix(in srgb, var(--lime) 6%, var(--bg));
@@ -80,21 +85,104 @@
   max-width: 60ch;
 }
 
-/* ── Vertical rhythm: hairline rule + 96px gap between numbered sections ─── */
-.rp-section {
-  padding-top: 96px;
-  border-top: 1px solid var(--border);
+/* ── Slideshow: full-viewport, one section per slide, vertical scroll-snap ──
+   .rp-slideshow is the scrolling element (not html/body) so the fixed
+   header and dot-nav can stay positioned relative to the real viewport. */
+.rp-slideshow {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
 }
-.rp-section:first-of-type {
-  border-top: none;
-  padding-top: 0;
+.rp-slide {
+  height: 100vh;
+  height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  /* No horizontal padding here — .rp-container/.rp-wide already handle it;
+     this is vertical clearance only (top: below the fixed header). */
+  padding: 88px 0 56px;
+  box-sizing: border-box;
+}
+.rp-slide-dark {
+  background: var(--ink-deep);
+  color: #ffffff;
+}
+
+@media (max-width: 700px) {
+  .rp-slideshow {
+    height: 100svh;
+  }
+  .rp-slide {
+    /* Never trap a slide taller than the viewport: it grows instead of
+       clipping, and the snap point still lands on its top edge. */
+    height: auto;
+    min-height: 100svh;
+    padding: 80px 0 48px;
+  }
+}
+
+/* ── S1-only scroll hint (down chevron) ─────────────────────────────────── */
+.rp-scroll-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  color: var(--ink-45);
+  font-size: 20px;
+  line-height: 1;
+  animation: bento-scroll-hint 1.8s ease-in-out infinite;
+}
+
+/* ── Right-edge slide progress dots ─────────────────────────────────────── */
+.rp-slide-nav {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.rp-slide-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+}
+.rp-slide-dot.is-active {
+  background: var(--ink);
+}
+.rp-slide-nav.on-dark .rp-slide-dot {
+  background: color-mix(in srgb, #ffffff 25%, transparent);
+}
+.rp-slide-nav.on-dark .rp-slide-dot.is-active {
+  background: var(--lime);
+}
+
+@media (max-width: 700px) {
+  .rp-slide-nav {
+    right: 10px;
+    gap: 8px;
+  }
 }
 
 /* ── Header: thin sticky utility bar (wordmark + download) ─────────────────── */
 .rp-header {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 50;
+  left: 0;
+  right: 0;
+  z-index: 70;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -134,9 +222,6 @@
 }
 
 /* ── Masthead ────────────────────────────────────────────────────────────── */
-.rp-masthead {
-  padding: 56px 0 40px;
-}
 .rp-masthead-rule {
   height: 1px;
   background: var(--border);
@@ -378,7 +463,7 @@
   position: absolute;
   inset: 0;
   height: 8px;
-  background: var(--lime-60);
+  background: var(--lime-deep-85);
 }
 .rp-legend {
   display: flex;
@@ -402,7 +487,7 @@
   background: var(--danger);
 }
 .rp-legend-dot.is-recoverable {
-  background: var(--lime-60);
+  background: var(--lime-deep-85);
 }
 
 /* ── 04. Pillar meters ────────────────────────────────────────────────────── */
@@ -423,14 +508,36 @@
   font-variant-numeric: tabular-nums;
 }
 .rp-pillar-track {
+  position: relative;
   height: 6px;
   background: var(--border);
   border-radius: 2px;
-  overflow: hidden;
+  margin-bottom: 18px;
 }
-.rp-pillar-fill {
-  height: 6px;
+.rp-pillar-fill,
+.rp-pillar-target-ghost {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
   border-radius: 2px;
+}
+.rp-pillar-target-ghost {
+  background: var(--lime-deep-tint);
+}
+.rp-pillar-target-marker {
+  position: absolute;
+  top: -3px;
+  height: 12px;
+  border-left: 1.5px dashed var(--lime-deep);
+}
+.rp-pillar-target-label {
+  position: absolute;
+  top: 100%;
+  margin-top: 3px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--lime-deep);
 }
 .rp-pillar-note {
   font-size: 13px;
@@ -497,9 +604,9 @@
 .rp-cta-finale {
   background: var(--ink-deep);
   color: #ffffff;
-  padding: 96px 24px 64px;
+  padding: 88px 24px 48px;
   text-align: center;
-  margin-top: 96px;
+  overflow-y: auto;
 }
 .rp-cta-headline {
   font-weight: 800;
@@ -557,11 +664,11 @@
 .rp-fill-animate {
   transition: width 500ms ease-out;
 }
-html:has(.rp-page) {
+.rp-slideshow {
   scroll-behavior: smooth;
 }
 @media (prefers-reduced-motion: reduce) {
-  html:has(.rp-page) {
+  .rp-slideshow {
     scroll-behavior: auto !important;
   }
   .rp-page *,
@@ -572,7 +679,7 @@ html:has(.rp-page) {
   }
 }
 
-/* ── Print: static, clean, one section per page ─────────────────────────── */
+/* ── Print: snap off, one slide per page — an 8-page deck ───────────────── */
 @media print {
   .rp-page,
   .rp-page * {
@@ -581,12 +688,28 @@ html:has(.rp-page) {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .rp-page .rp-header {
-    position: static !important;
+  .rp-page .rp-header,
+  .rp-page .rp-slide-nav {
+    display: none !important;
   }
-  .rp-page .rp-section,
-  .rp-page .rp-cta-finale {
+  .rp-page .rp-slideshow {
+    height: auto !important;
+    overflow: visible !important;
+    scroll-snap-type: none !important;
+  }
+  .rp-page .rp-slide {
+    height: auto !important;
+    min-height: 0 !important;
+    scroll-snap-align: none !important;
+    break-after: page;
     break-inside: avoid;
+    padding-top: 48px;
+  }
+  .rp-page .rp-slide:last-child {
+    break-after: auto;
+  }
+  .rp-page .rp-scroll-hint {
+    display: none !important;
   }
   .rp-page .rp-no-print {
     display: none !important;

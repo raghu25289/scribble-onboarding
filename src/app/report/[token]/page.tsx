@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { store } from "@/lib/store";
 import { computeReportViewModel } from "@/lib/reportView";
 import ReportHeader from "@/components/report/ReportHeader";
+import SlideNav from "@/components/report/SlideNav";
 import Masthead from "@/components/report/Masthead";
 import KeyFindingsStrip from "@/components/report/KeyFindingsStrip";
 import Section01WhereYouStand from "@/components/report/Section01WhereYouStand";
@@ -46,14 +47,17 @@ export default async function ReportPage({ params }: Props) {
   return (
     <div className="rp-page">
       <ReportHeader token={token} />
-      <Masthead domain={view.domain} completedAt={view.completedAt} category={view.category} />
-      <KeyFindingsStrip view={view} isStatic={false} />
-      <Section01WhereYouStand view={view} isStatic={false} />
-      <Section02WhereBuyersGo view={view} isStatic={false} />
-      <Section03WhatItCosts view={view} isStatic={false} />
-      <Section04WhyAISkipsYou view={view} isStatic={false} />
-      <Section05ThreeMoves view={view} />
-      <CtaFinaleLive view={view} />
+      <SlideNav slideCount={view.slideCount} />
+      <div className="rp-slideshow">
+        <Masthead domain={view.domain} completedAt={view.completedAt} category={view.category} />
+        <KeyFindingsStrip view={view} isStatic={false} />
+        <Section01WhereYouStand view={view} isStatic={false} />
+        <Section02WhereBuyersGo view={view} isStatic={false} />
+        <Section03WhatItCosts view={view} isStatic={false} />
+        <Section04WhyAISkipsYou view={view} isStatic={false} />
+        <Section05ThreeMoves view={view} />
+        <CtaFinaleLive view={view} />
+      </div>
     </div>
   );
 }

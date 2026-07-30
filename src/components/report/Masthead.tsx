@@ -12,7 +12,7 @@ interface Props {
 
 export default function Masthead({ domain, completedAt, category }: Props) {
   return (
-    <section className="rp-masthead">
+    <section className="rp-slide">
       <div className="rp-container">
         <span className="rp-header-wordmark">
           <span className="rp-dot" />
@@ -27,6 +27,9 @@ export default function Masthead({ domain, completedAt, category }: Props) {
           {formatDate(completedAt)} · {category}
         </p>
       </div>
+      <span className="rp-scroll-hint" aria-hidden="true">
+        ↓
+      </span>
     </section>
   );
 }

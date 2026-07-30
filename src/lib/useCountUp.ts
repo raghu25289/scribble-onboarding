@@ -27,7 +27,7 @@ export function useCountUp<T extends HTMLElement>(target: number, durationMs = 1
 
         const start = performance.now();
         const tick = (now: number) => {
-          const progress = Math.min(1, (now - start) / durationMs);
+          const progress = Math.max(0, Math.min(1, (now - start) / durationMs));
           const eased = 1 - Math.pow(1 - progress, 3);
           setValue(Math.round(target * eased));
           if (progress < 1) requestAnimationFrame(tick);

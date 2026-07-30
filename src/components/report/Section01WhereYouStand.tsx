@@ -5,7 +5,7 @@ export default function Section01WhereYouStand({ view, isStatic }: { view: Repor
   const { scorePct, scoreColor, visibleChecks, totalChecks, engineLabels, matrixRows } = view;
 
   return (
-    <section className="rp-section">
+    <section className="rp-slide">
       <div className="rp-container">
         <span className="rp-index">01</span>
         <h2 className="rp-h2">Where you stand</h2>

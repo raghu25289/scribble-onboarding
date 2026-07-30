@@ -8,7 +8,7 @@ export default function Section03WhatItCosts({ view, isStatic }: { view: ReportV
   if (!hasRisk) return null;
 
   return (
-    <section className="rp-section">
+    <section className="rp-slide">
       <div className="rp-container">
         <span className="rp-index">03</span>
         <h2 className="rp-h2">What it costs</h2>

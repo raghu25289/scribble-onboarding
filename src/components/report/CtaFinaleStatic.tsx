@@ -22,7 +22,7 @@ export default function CtaFinaleStatic({ view }: { view: ReportViewModel }) {
   const bookingUrl = calLink ? `https://cal.com/${calLink}` : undefined;
 
   return (
-    <section className="rp-cta-finale">
+    <section className="rp-slide rp-slide-dark rp-cta-finale">
       <h2 className="rp-cta-headline">Your customer asks AI first. Be the answer.</h2>
       <p className="rp-cta-sub">
         This report was prepared by Scribble, the creator network that gets brands cited by AI.

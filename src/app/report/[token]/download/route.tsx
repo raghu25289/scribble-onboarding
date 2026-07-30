@@ -15,11 +15,73 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+// Vanilla JS equivalent of SlideNav.tsx (the live page's client component):
+// same behavior (active-dot tracking via IntersectionObserver, arrow/
+// PageUp/PageDown keyboard nav, click-to-jump), hand-written here since the
+// download has no React/bundler at all — this is the one inline script the
+// self-contained export ships, per the slideshow spec.
+const SLIDE_NAV_SCRIPT = `(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".rp-slide"));
+  var dots = Array.prototype.slice.call(document.querySelectorAll(".rp-slide-dot"));
+  var nav = document.querySelector(".rp-slide-nav");
+  if (!slides.length) return;
+
+  var activeIndex = 0;
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setActive(idx) {
+    activeIndex = idx;
+    dots.forEach(function (d, i) { d.classList.toggle("is-active", i === idx); });
+    var isDark = slides[idx] && slides[idx].classList.contains("rp-slide-dark");
+    if (nav) nav.classList.toggle("on-dark", !!isDark);
+  }
+
+  var observer = new IntersectionObserver(function (entries) {
+    var best = null;
+    entries.forEach(function (entry) {
+      var idx = slides.indexOf(entry.target);
+      if (idx === -1 || !entry.isIntersecting) return;
+      if (!best || entry.intersectionRatio > best.ratio) best = { idx: idx, ratio: entry.intersectionRatio };
+    });
+    if (best) setActive(best.idx);
+  }, { threshold: [0.5] });
+  slides.forEach(function (s) { observer.observe(s); });
+
+  // Update activeIndex optimistically rather than waiting for the
+  // IntersectionObserver to confirm the smooth-scroll landed: back-to-back
+  // key presses (or dot clicks) fired before the previous scroll settles
+  // would otherwise all read the same stale activeIndex and redundantly
+  // target the same next slide instead of stacking. The observer still runs
+  // and simply reconfirms (or corrects, for manual scrolling) this.
+  function goTo(idx) {
+    var clamped = Math.max(0, Math.min(slides.length - 1, idx));
+    setActive(clamped);
+    slides[clamped].scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
+  }
+
+  dots.forEach(function (d, i) {
+    d.addEventListener("click", function () { goTo(i); });
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown" || e.key === "PageDown") {
+      e.preventDefault();
+      goTo(activeIndex + 1);
+    } else if (e.key === "ArrowUp" || e.key === "PageUp") {
+      e.preventDefault();
+      goTo(activeIndex - 1);
+    }
+  });
+})();`;
+
 // A fully self-contained, static export of the report: all CSS inlined, all
-// data baked in at final values, zero JS. Must render perfectly from a
-// double-click on disk with no network — so it never touches the Cal.com
-// embed (see CtaFinaleStatic) and reads report.css raw rather than relying
-// on Next's compiled Tailwind bundle, which this page doesn't use at all.
+// data baked in at final values. Must render perfectly from a double-click
+// on disk with no network — so it never touches the Cal.com embed (see
+// CtaFinaleStatic) and reads report.css raw rather than relying on Next's
+// compiled Tailwind bundle, which this page doesn't use at all. The one
+// exception to "no JS" is the slideshow nav script above, hand-written
+// vanilla JS with no dependencies, needed for keyboard nav + the dot
+// indicator to work offline exactly like the live page.
 export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const record = await store.getOnboardingByToken(token);
@@ -39,14 +101,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
 
   const bodyMarkup = renderToStaticMarkup(
     <div className="rp-page">
-      <Masthead domain={view.domain} completedAt={view.completedAt} category={view.category} />
-      <KeyFindingsStrip view={view} isStatic={true} />
-      <Section01WhereYouStand view={view} isStatic={true} />
-      <Section02WhereBuyersGo view={view} isStatic={true} />
-      <Section03WhatItCosts view={view} isStatic={true} />
-      <Section04WhyAISkipsYou view={view} isStatic={true} />
-      <Section05ThreeMoves view={view} />
-      <CtaFinaleStatic view={view} />
+      <div className="rp-slideshow">
+        <Masthead domain={view.domain} completedAt={view.completedAt} category={view.category} />
+        <KeyFindingsStrip view={view} isStatic={true} />
+        <Section01WhereYouStand view={view} isStatic={true} />
+        <Section02WhereBuyersGo view={view} isStatic={true} />
+        <Section03WhatItCosts view={view} isStatic={true} />
+        <Section04WhyAISkipsYou view={view} isStatic={true} />
+        <Section05ThreeMoves view={view} />
+        <CtaFinaleStatic view={view} />
+      </div>
+      <nav className="rp-slide-nav" aria-label="Report sections">
+        {Array.from({ length: view.slideCount }).map((_, i) => (
+          <button key={i} type="button" className={`rp-slide-dot ${i === 0 ? "is-active" : ""}`} aria-label={`Go to slide ${i + 1}`} />
+        ))}
+      </nav>
     </div>
   );
 
@@ -64,6 +133,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
 </head>
 <body>
 ${bodyMarkup}
+<script>${SLIDE_NAV_SCRIPT}</script>
 </body>
 </html>
 `;
