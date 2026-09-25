@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<IAPDFirmSECReport GenOn="2026-09-25"><Firms>
+  <Firm>
+    <Info FirmCrdNb="123456" SECNb="801-123456" BusNm="DIGITAL ASSET PARTNERS" LegalNm="DIGITAL ASSET PARTNERS LLC"/>
+    <MainAddr City="NEW YORK" State="NY" Cntry="United States"/>
+    <Rgstn FirmType="Registered" St="APPROVED" Dt="2020-01-01"/>
+    <Filing Dt="2026-09-20" FormVrsn="10/2021"/>
+    <FormInfo><Part1A><Item1><WebAddrs><WebAddr>https://digital-assets.test/</WebAddr></WebAddrs></Item1></Part1A></FormInfo>
+  </Firm>
+  <Firm>
+    <Info FirmCrdNb="654321" SECNb="801-654321" BusNm="TRADITIONAL ADVISORS" LegalNm="TRADITIONAL ADVISORS LLC"/>
+    <MainAddr City="BOSTON" State="MA" Cntry="United States"/>
+    <Rgstn FirmType="Registered" St="APPROVED" Dt="2020-01-01"/>
+    <Filing Dt="2026-09-20" FormVrsn="10/2021"/>
+    <FormInfo><Part1A><Item1><WebAddrs><WebAddr>https://traditional.test/</WebAddr></WebAddrs></Item1></Part1A></FormInfo>
+  </Firm>
+</Firms></IAPDFirmSECReport>

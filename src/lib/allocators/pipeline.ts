@@ -7,11 +7,15 @@ import { upsertAllocatorOrganizations } from "./graph";
 
 export async function ingestAllocatorGraph(): Promise<AllocatorGraph> {
   const startedAt = new Date().toISOString();
+  const currentGraph = await store.getAllocatorGraph();
   const connectors = allocatorConnectors().filter((connector) => connector.enabled());
-  const settled = await Promise.allSettled(connectors.map((connector) => connector.ingest()));
-  const records = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const previousDiagnostics = new Map(currentGraph.ingestionRuns.flatMap((run) => run.sourceDiagnostics || []).map((item) => [item.sourceId, item]));
+  const settled = await Promise.allSettled(connectors.map((connector) => connector.ingest(previousDiagnostics.get(connector.id))));
+  const records = settled.flatMap((result) => result.status === "fulfilled" ? result.value.records : []);
+  const sourceDiagnostics = settled.flatMap((result, index) => result.status === "fulfilled" ? result.value.diagnostics : [{ sourceId: connectors[index].id, attempted: true, fetchedCount: 0, acceptedCount: 0, rejectedCount: 0, failureReason: (result.reason as Error).message, lastSuccessAt: previousDiagnostics.get(connectors[index].id)?.lastSuccessAt || null, freshnessAt: previousDiagnostics.get(connectors[index].id)?.freshnessAt || null, durationMs: 0 }]);
   const errors = settled.flatMap((result, index) => result.status === "rejected" ? [`${connectors[index].id}: ${(result.reason as Error).message}`] : []);
-  let graph = upsertAllocatorOrganizations(await store.getAllocatorGraph(), records);
+  errors.push(...sourceDiagnostics.filter((item) => item.failureReason).map((item) => `${item.sourceId}: ${item.failureReason}`));
+  let graph = upsertAllocatorOrganizations(currentGraph, records);
   graph = {
     ...graph,
     ingestionRuns: [...graph.ingestionRuns, {
@@ -22,6 +26,7 @@ export async function ingestAllocatorGraph(): Promise<AllocatorGraph> {
       recordsSeen: records.length,
       organizationsUpserted: records.length,
       errors,
+      sourceDiagnostics,
     }].slice(-100),
   };
   await store.saveAllocatorGraph(graph);
@@ -47,7 +52,9 @@ async function sourceIsReachable(url: string): Promise<boolean> {
 
 export async function verifyAllocatorProspects(prospects: IndexProspect[]): Promise<IndexProspect[]> {
   const checked: Array<IndexProspect | null> = await Promise.all(prospects.map(async (prospect): Promise<IndexProspect | null> => {
-    const results = await Promise.all(prospect.evidence.slice(0, 2).map((item) => sourceIsReachable(item.url)));
+    const officialEvidence = prospect.evidence.filter((item) => item.sourceKind === "official_site");
+    if (!officialEvidence.length) return null;
+    const results = await Promise.all(officialEvidence.slice(0, 2).map((item) => sourceIsReachable(item.url)));
     if (!results.some(Boolean)) return null;
     return {
       ...prospect,
@@ -71,7 +78,7 @@ export async function rematchAllocatorWorkspaces(graph: AllocatorGraph): Promise
     if (!hasAllocatorSelection(workspace)) continue;
     const record = await store.getOnboarding(workspace.onboardingId);
     if (!record) continue;
-    const additions = allocatorMatches(graph.organizations, record, workspace, config.allocatorFeedSize);
+    const additions = await verifyAllocatorProspects(allocatorMatches(graph.organizations, record, workspace, config.allocatorFeedSize));
     if (!additions.length) continue;
     workspace.allocatorProspects = [...(workspace.allocatorProspects || []), ...additions];
     workspace.lastAllocatorFeedAt = new Date().toISOString();

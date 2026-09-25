@@ -75,14 +75,30 @@ consumers as usable opportunities.
 
 The allocator pipeline is a separate, persistent candidate graph. Enable it with
 `ALLOCATOR_PIPELINE_ENABLED=true`; `/api/cron/allocators` runs weekly on Vercel and is
-protected by `CRON_SECRET`. Source adapters consume customer-controlled ETL feeds for:
+protected by `CRON_SECRET`. With no feed URL or paid credential configured, it downloads
+the current SEC/IAPD firm compilation from the official manifest, streams the compressed
+XML, identifies crypto-focused advisers, and verifies liquid/hybrid mandate evidence on
+the firm's own website before the organization can enter a lead feed. Set a descriptive
+`ALLOCATOR_HTTP_USER_AGENT` with an operations contact for production requests.
+Official-site verification honors `robots.txt`, limits crawling to the homepage plus at
+most two same-origin strategy/team/about pages, caps response size, and uses five-domain
+concurrency.
 
-- public/official sources first: SEC Form ADV/IAPD and official fund sites;
+The connector taxonomy is multi-label and covers L1/L2/interoperability, DeFi,
+stablecoins, payments, exchanges, custody/wallets, institutional infrastructure,
+developer tooling, data/analytics, security, privacy, RWA/tokenization, gaming,
+NFT/consumer, DePIN, AI × crypto, identity, governance/DAO tooling, market making, and
+unknown/emerging categories. Matching also considers mandate/vehicle, strategy, chain,
+stage, geography, allocation range when published, and fresh activity evidence.
+
+Additional adapters support:
+
+- public/official sources first: direct SEC Form ADV/IAPD plus official fund sites;
 - public crypto/on-chain enrichment: DefiLlama, Dune, explorers, and labeled wallets;
 - optional licensed feeds: Crunchbase, PitchBook, RootData, Nansen, and Arkham, each
   gated by both a feed URL and its credential.
 
-Adapters must emit source URLs, observation dates, and `public`/`licensed` provenance.
+Custom adapters must emit source URLs, observation dates, and `public`/`licensed` provenance.
 The graph normalizes and deduplicates organizations by domain, keeps fund mandates,
 people and public contact routes, tracks freshness, and re-matches saved workspaces.
 The owner-triggered feed performs a final source reachability check before adding leads.
@@ -117,6 +133,24 @@ and the allocator graph uses its own versioned key/file. Rollback is setting
 
 The fixture is fictional, uses `.example.invalid`, and is marked **FICTIONAL DEMO DATA**
 on every surfaced card. Disable `ALLOCATOR_DEMO_MODE` before connecting real feeds.
+
+For live ingestion, leave `ALLOCATOR_DEMO_MODE` unset, enable the pipeline, set
+`CRON_SECRET`, and call the same cron endpoint. Its JSON response includes per-source
+diagnostics: attempted, fetched, accepted and rejected counts, failure reason, last
+success, source freshness/version, and duration. The public SEC source is on by default;
+set `ALLOCATOR_SEC_PUBLIC_ENABLED=false` only for rollback. The current feed is skipped
+idempotently when its manifest version was already ingested successfully.
+
+Source capability status:
+
+- **Works without credentials:** current SEC/IAPD SEC-registered/ERA firm compilation,
+  IAPD firm provenance links, and public official-fund-site verification.
+- **Optional operator feeds:** Dune queries, explorer/labeled-wallet outputs, and other
+  on-chain enrichment. These remain JSON adapter contracts because public endpoints and
+  licensing vary by dataset.
+- **Requires a paid license/credential:** DefiLlama raises/investor data, Crunchbase,
+  PitchBook, RootData, Nansen, and Arkham. Their adapters remain disabled unless both the
+  licensed feed URL and corresponding key are configured.
 
 ---
 

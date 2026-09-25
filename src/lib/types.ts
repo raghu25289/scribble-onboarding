@@ -262,6 +262,7 @@ export interface ProspectEvidence {
   label: string;
   url: string;
   snippet: string;
+  sourceKind?: AllocatorSourceKind;
 }
 
 export type AllocatorType =
@@ -269,7 +270,11 @@ export type AllocatorType =
   | "crypto_hedge_fund"
   | "market_maker"
   | "crypto_family_office"
-  | "venture_liquid_hybrid";
+  | "venture_liquid_hybrid"
+  | "venture_only"
+  | "strategic_corporate"
+  | "fund_of_funds"
+  | "institutional_asset_manager";
 
 export type AllocatorMandate = "liquid" | "hybrid" | "venture_only" | "unknown";
 export type AllocatorSourceKind =
@@ -313,6 +318,9 @@ export interface AllocatorFund {
   name: string;
   mandate: AllocatorMandate;
   strategies: string[];
+  sectors?: string[];
+  stages?: string[];
+  vehicles?: ("token" | "equity" | "liquid" | "private" | "public_markets")[];
   chains: string[];
   assets: string[];
   geographies: string[];
@@ -350,7 +358,21 @@ export interface AllocatorGraph {
     recordsSeen: number;
     organizationsUpserted: number;
     errors: string[];
+    sourceDiagnostics?: AllocatorSourceDiagnostic[];
   }[];
+}
+
+export interface AllocatorSourceDiagnostic {
+  sourceId: string;
+  attempted: boolean;
+  fetchedCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  failureReason: string | null;
+  lastSuccessAt: string | null;
+  freshnessAt: string | null;
+  sourceVersion?: string;
+  durationMs: number;
 }
 
 export interface AllocatorMatch {
