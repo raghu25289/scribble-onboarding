@@ -4,11 +4,11 @@
 //   • RedisStore    — Upstash Redis (durable on Vercel's ephemeral filesystem).
 //   • JsonFileStore — a JSON file (zero-config local dev).
 //
-// Selection (see `store` at the bottom): if UPSTASH_REDIS_REST_URL and
-// UPSTASH_REDIS_REST_TOKEN are both set, use Redis; otherwise fall back to the
-// JSON file store. Local dev needs no config; production just sets the two env
-// vars. Every record is also console.log'd so completed onboardings show up in
-// Vercel function logs regardless of backend.
+// Selection (see `store` at the bottom): prefer the Vercel Marketplace
+// DURABLE_KV_REST_API_* credentials, while retaining the legacy Upstash names
+// as a local/backward-compatible fallback. If neither pair is set, use the JSON
+// file store. Every record is also console.log'd so completed onboardings show
+// up in Vercel function logs regardless of backend.
 //
 // To swap to Prisma/Postgres/etc.: implement the LeadStore interface and export
 // your implementation as `store`. Nothing else in the app touches persistence.
@@ -70,14 +70,22 @@ const INDEX_WORKSPACE_KEY = (accessToken: string) => `indexWorkspace:${accessTok
 const INDEX_WORKSPACES_INDEX = "indexWorkspaces:index";
 const ALLOCATOR_GRAPH_KEY = "allocators:graph:v1";
 
+function redisCredentials(): { url: string; token: string } | null {
+  const url = process.env.DURABLE_KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.DURABLE_KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token ? { url, token } : null;
+}
+
 // ── Redis implementation ─────────────────────────────────────────────────────
 class RedisStore implements LeadStore {
   private redis: Redis;
 
   constructor() {
+    const credentials = redisCredentials();
+    if (!credentials) throw new Error("Redis credentials are not configured");
     this.redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      url: credentials.url,
+      token: credentials.token,
     });
   }
 
@@ -398,7 +406,7 @@ class JsonFileStore implements LeadStore {
 
 // ── Selection ────────────────────────────────────────────────────────────────
 export function usingRedis(): boolean {
-  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  return redisCredentials() !== null;
 }
 
 function makeStore(): LeadStore {
