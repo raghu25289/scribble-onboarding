@@ -2,6 +2,10 @@
   "functions": {
     "src/app/api/analyze/route.ts": {
       "maxDuration": 300
+    },
+    "src/app/api/cron/allocators/route.ts": {
+      "maxDuration": 300
     }
-  }
+  },
+  "crons": [{ "path": "/api/cron/allocators", "schedule": "0 8 * * 1" }]
 }

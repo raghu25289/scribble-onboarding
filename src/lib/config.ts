@@ -38,6 +38,13 @@ export const config = {
     process.env.ONBOARDING_STORE_PATH || "./data/onboardings.json",
   auditRequestStorePath:
     process.env.AUDIT_REQUEST_STORE_PATH || "./data/audit-requests.json",
+  indexWorkspaceStorePath:
+    process.env.INDEX_WORKSPACE_STORE_PATH || "./data/index-workspaces.json",
+  allocatorGraphStorePath:
+    process.env.ALLOCATOR_GRAPH_STORE_PATH || "./data/allocator-graph.json",
+  allocatorFeedSize: Math.max(1, Math.min(10, Number(process.env.ALLOCATOR_FEED_SIZE || 10))),
+  allocatorPipelineEnabled: process.env.ALLOCATOR_PIPELINE_ENABLED === "true",
+  allocatorDemoMode: process.env.ALLOCATOR_DEMO_MODE === "true",
 };
 
 export function hasSearchKey(): boolean {

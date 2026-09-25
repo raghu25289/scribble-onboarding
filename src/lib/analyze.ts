@@ -42,6 +42,8 @@ import type {
   QueryWithDemand,
   ArpuVerdict,
 } from "./types";
+import { normalizeQuestionSettings, questionMixMatches } from "./questionSettings";
+import type { QuestionSettings } from "./types";
 
 type Emit = (event: AnalyzeEvent) => void;
 
@@ -83,11 +85,13 @@ const queriesSchema = {
         additionalProperties: false,
         properties: {
           text: { type: "string" },
+          intent: { type: "string", enum: ["buying", "brand"] },
+          depth: { type: "string", enum: ["basic", "intermediate", "advanced"] },
           mappedProductName: { type: "string" },
           demandTier: { type: "string", enum: ["niche", "moderate", "high", "mass"] },
           tierJustification: { type: "string" },
         },
-        required: ["text", "mappedProductName", "demandTier", "tierJustification"],
+        required: ["text", "intent", "depth", "mappedProductName", "demandTier", "tierJustification"],
       },
     },
   },
@@ -129,19 +133,22 @@ const arpuSchema = {
   ],
 };
 
-export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
+export async function runAnalysis(lead: Lead, emit: Emit, settingsInput?: Partial<QuestionSettings>): Promise<void> {
+  const questionSettings = normalizeQuestionSettings(settingsInput);
   const record: OnboardingRecord = {
     id: makeId("onb"),
     leadId: lead.id,
     email: lead.email,
     domain: lead.domain,
     brand: null,
+    questionSettings,
     queries: [],
     visibility: [],
     arpu: null,
     pillars: null,
     completedAt: "",
     reportToken: makeReportToken(),
+    indexAccessToken: makeReportToken(),
     reportInsights: null,
   };
 
@@ -201,6 +208,8 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
       mappedProductName: string;
       demandTier: DemandTier;
       tierJustification: string;
+      intent: "buying" | "brand";
+      depth: "basic" | "intermediate" | "advanced";
     };
     const out = await generateJson<{ queries: RawQuery[] }>({
       system: QUERY_GENERATION_SYSTEM,
@@ -210,11 +219,15 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
         brandAudience: brand.audience,
         brandCategory: brand.category,
         brandProducts: brand.products,
+        questionSettings,
       }),
       schema: queriesSchema,
       tracker,
       costLabel: "query_generation",
     });
+    if (!questionMixMatches(out.queries || [], questionSettings, config.queryCount)) {
+      throw new Error("The generated questions did not satisfy the selected intent/depth mix. Please retry.");
+    }
 
     // The model names a product; code supplies its price, so there's a
     // single source of truth for numbers (the brand's own products list)
@@ -231,11 +244,29 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
 
     queries = (out.queries || []).slice(0, config.queryCount).map((q) => ({
       text: q.text,
+      intent: q.intent,
+      depth: q.depth,
+      source: "generated" as const,
       demandTier: q.demandTier,
       tierJustification: q.tierJustification,
       mappedProductName: q.mappedProductName,
       mappedPriceMonthlyUsd: q.mappedProductName ? findProductPrice(q.mappedProductName) : null,
     }));
+    const existing = new Set(queries.map((query) => query.text.toLowerCase()));
+    for (const custom of questionSettings.customQuestions) {
+      if (existing.has(custom.toLowerCase())) continue;
+      queries.push({
+        text: custom,
+        intent: questionSettings.intent === "brand" ? "brand" : "buying",
+        depth: questionSettings.depth === "advanced" ? "advanced" : questionSettings.depth === "basic" ? "basic" : "intermediate",
+        source: "custom",
+        demandTier: "niche",
+        tierJustification: "Custom question supplied by the product owner; demand is not inferred.",
+        mappedProductName: "",
+        mappedPriceMonthlyUsd: null,
+      });
+      existing.add(custom.toLowerCase());
+    }
   } catch (e) {
     emit({
       type: "error",
@@ -468,5 +499,10 @@ export async function runAnalysis(lead: Lead, emit: Emit): Promise<void> {
   console.log(
     `[Scribble] audit cost estimate for ${lead.domain}: $${tracker.total().toFixed(4)} (${formatCostBreakdown(tracker)})`
   );
-  emit({ type: "done", onboardingId: record.id, reportToken: record.reportToken });
+  emit({
+    type: "done",
+    onboardingId: record.id,
+    reportToken: record.reportToken,
+    indexAccessToken: record.indexAccessToken,
+  });
 }

@@ -1,0 +1,43 @@
+{
+  "fixture": true,
+  "warning": "Fictional sample data for local development only. It is not verified intelligence and is never loaded automatically.",
+  "organizations": [
+    {
+      "id": "allocator_demo_atlas",
+      "canonicalName": "Atlas Liquid Strategies (Demo)",
+      "aliases": ["Atlas LS Demo"],
+      "normalizedDomain": "atlas-liquid.example.invalid",
+      "allocatorType": "liquid_token_fund",
+      "headquarters": "Demo jurisdiction",
+      "funds": [{
+        "id": "fund_demo_atlas_liquid",
+        "name": "Atlas Liquid Digital Assets (Demo)",
+        "mandate": "liquid",
+        "strategies": ["DeFi yield", "liquid staking"],
+        "chains": ["Ethereum"],
+        "assets": ["ETH"],
+        "geographies": ["Global"],
+        "allocationMinUsd": 100000,
+        "allocationMaxUsd": 1000000,
+        "evidenceIds": ["evidence_demo_official"]
+      }],
+      "people": [],
+      "evidence": [{
+        "id": "evidence_demo_official",
+        "sourceKind": "official_site",
+        "sourceName": "Fictional official site",
+        "url": "https://atlas-liquid.example.invalid/strategy",
+        "title": "Demo liquid strategy",
+        "excerpt": "Fictional sample evidence; not a real allocator.",
+        "observedAt": "2026-01-01T00:00:00.000Z",
+        "publishedAt": "2026-01-01T00:00:00.000Z",
+        "license": "public"
+      }],
+      "activitySignals": [],
+      "sourceRecordIds": ["demo:atlas"],
+      "firstSeenAt": "2026-01-01T00:00:00.000Z",
+      "lastSeenAt": "2026-01-01T00:00:00.000Z",
+      "lastEnrichedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
+}

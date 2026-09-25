@@ -14,6 +14,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { config } from "./config";
+import { requestedQuestionMix } from "./questionSettings";
+import type { QuestionSettings } from "./types";
 
 // ── 1. BRAND UNDERSTANDING ───────────────────────────────────────────────────
 // Turns scraped homepage/pricing text into a structured understanding of the
@@ -63,11 +65,13 @@ export function queryGenerationPrompt(input: {
   brandAudience: string;
   brandCategory: string;
   brandProducts: { name: string; priceMonthlyUsd: number }[];
+  questionSettings: QuestionSettings;
 }): string {
   const productList = input.brandProducts
     .map((p) => `- ${p.name}: $${p.priceMonthlyUsd}`)
     .join("\n");
 
+  const mix = requestedQuestionMix(input.questionSettings, config.queryCount);
   return `Brand: ${input.domain}
 What it does: ${input.brandProduct}
 Who it's for: ${input.brandAudience}
@@ -75,7 +79,16 @@ Category: ${input.brandCategory}
 Products this brand sells:
 ${productList}
 
-Generate exactly ${config.queryCount} questions a real buyer would ask an AI assistant when they are actively evaluating a solution like this one — questions where ${input.domain} SHOULD be one of the recommended answers.
+Generate exactly ${config.queryCount} questions where ${input.domain} SHOULD be a credible answer.
+
+QUESTION PROGRAM
+- Intent: ${input.questionSettings.intent}. Return exactly ${mix.buying} buying and ${mix.brand} brand questions.
+- Depth: ${input.questionSettings.depth}. Return exactly ${mix.basic} basic, ${mix.intermediate} intermediate, and ${mix.advanced} advanced questions.
+- Buying questions cover evaluation, alternatives, comparisons, use cases, adoption criteria, and purchase intent.
+- Brand questions cover awareness, reputation, trust, differentiation, and category association.
+- Basic means broad plain-language category/discovery questions from non-experts.
+- Intermediate means informed evaluation or comparison.
+- Advanced means niche, technically specific questions from subject-matter experts.
 
 Rules:
 - Write natural questions a human would actually type or say out loud. NOT keyword strings.
@@ -100,7 +113,7 @@ For each question, also classify:
 
 3. tierJustification: one short line justifying the tier pick (e.g. "Niche - only relevant to teams running regulated supply chains.").
 
-Return exactly ${config.queryCount} objects, each with: text (the question), mappedProductName (string), demandTier ("niche" | "moderate" | "high" | "mass"), tierJustification (one line).`;
+Return exactly ${config.queryCount} objects, each with: text (the question), intent ("buying" | "brand"), depth ("basic" | "intermediate" | "advanced"), mappedProductName (string), demandTier ("niche" | "moderate" | "high" | "mass"), tierJustification (one line).`;
 }
 
 // ── 3. VISIBILITY JUDGE ──────────────────────────────────────────────────────

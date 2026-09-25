@@ -6,13 +6,13 @@ import { NextRequest } from "next/server";
 import { runAnalysis } from "@/lib/analyze";
 import { store } from "@/lib/store";
 import { isValidEmail, normalizeDomain } from "@/lib/validate";
-import type { AnalyzeEvent, Lead } from "@/lib/types";
+import type { AnalyzeEvent, Lead, QuestionSettings } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  let body: { leadId?: string; email?: string; url?: string };
+  let body: { leadId?: string; email?: string; url?: string; questionSettings?: Partial<QuestionSettings> };
   try {
     body = await req.json();
   } catch {
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
       };
       try {
-        await runAnalysis(resolvedLead, emit);
+        await runAnalysis(resolvedLead, emit, body.questionSettings);
       } catch (e) {
         emit({
           type: "error",

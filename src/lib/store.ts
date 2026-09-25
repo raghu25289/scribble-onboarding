@@ -19,7 +19,8 @@ import os from "os";
 import { randomBytes } from "crypto";
 import { Redis } from "@upstash/redis";
 import { config } from "./config";
-import type { AuditRequest, Lead, OnboardingRecord } from "./types";
+import type { AllocatorGraph, AuditRequest, IndexWorkspace, Lead, OnboardingRecord } from "./types";
+import { emptyAllocatorGraph } from "./allocators/graph";
 
 export interface LeadStore {
   createLead(input: Omit<Lead, "id" | "createdAt">): Promise<Lead>;
@@ -27,10 +28,16 @@ export interface LeadStore {
   logOnboarding(record: OnboardingRecord): Promise<void>;
   getOnboarding(id: string): Promise<OnboardingRecord | null>;
   getOnboardingByToken(token: string): Promise<OnboardingRecord | null>;
+  getOnboardingByIndexToken(token: string): Promise<OnboardingRecord | null>;
   listLeads(): Promise<Lead[]>;
   listOnboardings(): Promise<OnboardingRecord[]>;
   logAuditRequest(input: Omit<AuditRequest, "id" | "createdAt">): Promise<AuditRequest>;
   listAuditRequests(): Promise<AuditRequest[]>;
+  getIndexWorkspace(accessToken: string): Promise<IndexWorkspace | null>;
+  saveIndexWorkspace(workspace: IndexWorkspace): Promise<void>;
+  listIndexWorkspaces(): Promise<IndexWorkspace[]>;
+  getAllocatorGraph(): Promise<AllocatorGraph>;
+  saveAllocatorGraph(graph: AllocatorGraph): Promise<void>;
 }
 
 function id(prefix: string): string {
@@ -56,8 +63,12 @@ const ONBOARDINGS_INDEX = "onboardings:index";
 // Secondary index: report token -> onboarding id, so the report page can look
 // an onboarding up by its public token without scanning the whole index.
 const REPORT_TOKEN_KEY = (token: string) => `reportToken:${token}`;
+const INDEX_TOKEN_KEY = (token: string) => `indexToken:${token}`;
 const AUDIT_REQUEST_KEY = (reqId: string) => `auditRequest:${reqId}`;
 const AUDIT_REQUESTS_INDEX = "auditRequests:index";
+const INDEX_WORKSPACE_KEY = (accessToken: string) => `indexWorkspace:${accessToken}`;
+const INDEX_WORKSPACES_INDEX = "indexWorkspaces:index";
+const ALLOCATOR_GRAPH_KEY = "allocators:graph:v1";
 
 // ── Redis implementation ─────────────────────────────────────────────────────
 class RedisStore implements LeadStore {
@@ -104,6 +115,9 @@ class RedisStore implements LeadStore {
       if (record.reportToken) {
         await this.redis.set(REPORT_TOKEN_KEY(record.reportToken), record.id);
       }
+      if (record.indexAccessToken) {
+        await this.redis.set(INDEX_TOKEN_KEY(record.indexAccessToken), record.id);
+      }
     } catch (e) {
       console.error("[store:redis] failed to persist onboarding:", (e as Error).message);
     }
@@ -126,6 +140,17 @@ class RedisStore implements LeadStore {
       return this.getOnboarding(onbId);
     } catch (e) {
       console.error("[store:redis] failed to read onboarding by token:", (e as Error).message);
+      return null;
+    }
+  }
+
+  async getOnboardingByIndexToken(token: string): Promise<OnboardingRecord | null> {
+    try {
+      const onbId = await this.redis.get<string>(INDEX_TOKEN_KEY(token));
+      if (!onbId) return null;
+      return this.getOnboarding(onbId);
+    } catch (e) {
+      console.error("[store:redis] failed to read onboarding by Index token:", (e as Error).message);
       return null;
     }
   }
@@ -186,6 +211,36 @@ class RedisStore implements LeadStore {
       return [];
     }
   }
+
+  async getIndexWorkspace(accessToken: string): Promise<IndexWorkspace | null> {
+    try {
+      return (await this.redis.get<IndexWorkspace>(INDEX_WORKSPACE_KEY(accessToken))) ?? null;
+    } catch (e) {
+      console.error("[store:redis] failed to read Index workspace:", (e as Error).message);
+      return null;
+    }
+  }
+
+  async saveIndexWorkspace(workspace: IndexWorkspace): Promise<void> {
+    const exists = await this.redis.exists(INDEX_WORKSPACE_KEY(workspace.accessToken));
+    await this.redis.set(INDEX_WORKSPACE_KEY(workspace.accessToken), workspace);
+    if (!exists) await this.redis.rpush(INDEX_WORKSPACES_INDEX, workspace.accessToken);
+  }
+
+  async listIndexWorkspaces(): Promise<IndexWorkspace[]> {
+    const tokens = await this.redis.lrange(INDEX_WORKSPACES_INDEX, 0, -1);
+    if (!tokens.length) return [];
+    const workspaces = await this.redis.mget<IndexWorkspace[]>(...tokens.map(INDEX_WORKSPACE_KEY));
+    return workspaces.filter((item): item is IndexWorkspace => !!item);
+  }
+
+  async getAllocatorGraph(): Promise<AllocatorGraph> {
+    return (await this.redis.get<AllocatorGraph>(ALLOCATOR_GRAPH_KEY)) || emptyAllocatorGraph();
+  }
+
+  async saveAllocatorGraph(graph: AllocatorGraph): Promise<void> {
+    await this.redis.set(ALLOCATOR_GRAPH_KEY, graph);
+  }
 }
 
 // ── JSON-file implementation ─────────────────────────────────────────────────
@@ -217,10 +272,17 @@ async function appendJson<T>(file: string, item: T): Promise<void> {
   await fs.writeFile(file, JSON.stringify(existing, null, 2), "utf8");
 }
 
+async function writeJsonArray<T>(file: string, items: T[]): Promise<void> {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  await fs.writeFile(file, JSON.stringify(items, null, 2), "utf8");
+}
+
 class JsonFileStore implements LeadStore {
   private leadsFile = resolveWritablePath(config.leadStorePath);
   private onboardingsFile = resolveWritablePath(config.onboardingStorePath);
   private auditRequestsFile = resolveWritablePath(config.auditRequestStorePath);
+  private indexWorkspacesFile = resolveWritablePath(config.indexWorkspaceStorePath);
+  private allocatorGraphFile = resolveWritablePath(config.allocatorGraphStorePath);
 
   async createLead(input: Omit<Lead, "id" | "createdAt">): Promise<Lead> {
     const lead: Lead = {
@@ -264,6 +326,11 @@ class JsonFileStore implements LeadStore {
     return records.find((r) => r.reportToken === token) || null;
   }
 
+  async getOnboardingByIndexToken(token: string): Promise<OnboardingRecord | null> {
+    const records = await readJsonArray<OnboardingRecord>(this.onboardingsFile);
+    return records.find((record) => record.indexAccessToken === token) || null;
+  }
+
   async listLeads(): Promise<Lead[]> {
     return readJsonArray<Lead>(this.leadsFile);
   }
@@ -294,6 +361,38 @@ class JsonFileStore implements LeadStore {
 
   async listAuditRequests(): Promise<AuditRequest[]> {
     return readJsonArray<AuditRequest>(this.auditRequestsFile);
+  }
+
+  async getIndexWorkspace(accessToken: string): Promise<IndexWorkspace | null> {
+    const workspaces = await readJsonArray<IndexWorkspace>(this.indexWorkspacesFile);
+    return workspaces.find((workspace) => workspace.accessToken === accessToken) || null;
+  }
+
+  async saveIndexWorkspace(workspace: IndexWorkspace): Promise<void> {
+    const workspaces = await readJsonArray<IndexWorkspace>(this.indexWorkspacesFile);
+    const index = workspaces.findIndex((item) => item.accessToken === workspace.accessToken);
+    if (index === -1) workspaces.push(workspace);
+    else workspaces[index] = workspace;
+    await writeJsonArray(this.indexWorkspacesFile, workspaces);
+  }
+
+  async listIndexWorkspaces(): Promise<IndexWorkspace[]> {
+    return readJsonArray<IndexWorkspace>(this.indexWorkspacesFile);
+  }
+
+  async getAllocatorGraph(): Promise<AllocatorGraph> {
+    try {
+      const raw = await fs.readFile(this.allocatorGraphFile, "utf8");
+      const graph = JSON.parse(raw) as AllocatorGraph;
+      return graph.version === 1 ? graph : emptyAllocatorGraph();
+    } catch {
+      return emptyAllocatorGraph();
+    }
+  }
+
+  async saveAllocatorGraph(graph: AllocatorGraph): Promise<void> {
+    await fs.mkdir(path.dirname(this.allocatorGraphFile), { recursive: true });
+    await fs.writeFile(this.allocatorGraphFile, JSON.stringify(graph, null, 2), "utf8");
   }
 }
 

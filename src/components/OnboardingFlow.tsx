@@ -20,6 +20,7 @@ import type {
   PillarScores,
   QueryVisibility,
   QueryWithDemand,
+  QuestionSettings,
 } from "@/lib/types";
 
 type Phase = "capture" | "analyzing" | "done" | "error";
@@ -37,6 +38,7 @@ export default function OnboardingFlow() {
   const [arpu, setArpu] = useState<ArpuVerdict | null>(null);
   const [pillars, setPillars] = useState<PillarScores | null>(null);
   const [reportToken, setReportToken] = useState<string | null>(null);
+  const [indexAccessToken, setIndexAccessToken] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
 
   const startedRef = useRef(false);
@@ -92,6 +94,7 @@ export default function OnboardingFlow() {
           setPhase("done");
           setActiveStep(null);
           setReportToken(ev.reportToken);
+          setIndexAccessToken(ev.indexAccessToken);
           break;
         case "error":
           if (ev.fatal) {
@@ -108,7 +111,7 @@ export default function OnboardingFlow() {
   );
 
   const start = useCallback(
-    async (email: string, url: string) => {
+    async (email: string, url: string, questionSettings: QuestionSettings) => {
       if (startedRef.current) return;
       startedRef.current = true;
 
@@ -137,7 +140,7 @@ export default function OnboardingFlow() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
-            lead ? { leadId: lead.id } : { email, url }
+            lead ? { leadId: lead.id, questionSettings } : { email, url, questionSettings }
           ),
         });
         if (!res.ok || !res.body) {
@@ -265,6 +268,19 @@ export default function OnboardingFlow() {
           total={totalChecks}
           topInvisibleCompetitor={topInvisibleCompetitor}
         />
+      )}
+
+      {phase === "done" && indexAccessToken && (
+        <section className="rounded-xl bg-[var(--ink)] px-6 py-7 text-white sm:flex sm:items-center sm:justify-between sm:gap-8">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--lime)]">New · Index leads</p>
+            <h2 className="mt-2 font-display text-2xl font-bold">Turn this profile into introductions.</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">Confirm your ideal customer, find matching people across LinkedIn and X, and approve personalized outreach.</p>
+          </div>
+          <a href={`/index/${indexAccessToken}`} className="mt-5 inline-flex shrink-0 rounded-lg bg-[var(--lime)] px-5 py-3 text-sm font-bold text-[var(--ink)] sm:mt-0">
+            Open Index
+          </a>
+        </section>
       )}
     </div>
   );

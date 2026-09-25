@@ -97,10 +97,23 @@ export interface PillarScores {
 // (see DEMAND_BANDS in costEstimate.ts) so they can't be inflated.
 export type DemandTier = "niche" | "moderate" | "high" | "mass";
 
+export type QuestionIntent = "buying" | "brand" | "both";
+export type QuestionDepth = "basic" | "intermediate" | "advanced" | "balanced";
+export type QuestionSource = "generated" | "custom";
+
+export interface QuestionSettings {
+  intent: QuestionIntent;
+  depth: QuestionDepth;
+  customQuestions: string[];
+}
+
 // A generated query plus its demand tier and which of the brand's products it
 // prices against. Feeds the "cost of invisibility" estimate on the results page.
 export interface QueryWithDemand {
   text: string;
+  intent: Exclude<QuestionIntent, "both">;
+  depth: Exclude<QuestionDepth, "balanced">;
+  source: QuestionSource;
   demandTier: DemandTier;
   tierJustification: string; // one line: why this tier
   mappedProductName: string; // "" when no specific product maps
@@ -148,6 +161,7 @@ export interface OnboardingRecord {
   email: string;
   domain: string;
   brand: BrandUnderstanding | null;
+  questionSettings: QuestionSettings;
   queries: QueryWithDemand[];
   visibility: QueryVisibility[];
   arpu: ArpuVerdict | null;
@@ -157,6 +171,9 @@ export interface OnboardingRecord {
   // deliberately not the id() scheme above (timestamp + short random, fine
   // for internal ids, guessable enough to matter for a public link).
   reportToken: string;
+  // Separate bearer token for the owner-only Index workspace. The public
+  // report token must never grant access to lead discovery or outreach.
+  indexAccessToken: string;
   reportInsights: ReportInsights | null;
 }
 
@@ -196,7 +213,7 @@ export type AnalyzeEvent =
   | { type: "engine_result"; queryIndex: number; total: number; engine: EngineId; data: EngineCheckResult }
   | { type: "arpu"; data: ArpuVerdict }
   | { type: "pillars"; data: PillarScores }
-  | { type: "done"; onboardingId: string; reportToken: string }
+  | { type: "done"; onboardingId: string; reportToken: string; indexAccessToken: string }
   | { type: "error"; step: AnalyzeStep; message: string; fatal: boolean };
 
 export type AnalyzeStep =
@@ -207,3 +224,180 @@ export type AnalyzeStep =
   | "assess_pillars"
   | "classify_arpu"
   | "log";
+
+// ─── Index lead discovery ───────────────────────────────────────────────────
+// A private workspace hangs off the report token. The completed audit supplies
+// the starting business context; the owner confirms the ICP before discovery.
+
+export interface IndexIcp {
+  targetRoles: string;
+  industries: string;
+  companyProfile: string;
+  geographies: string;
+  fitSignals: string;
+  exclusions: string;
+  offer: string;
+  proposedLeadCategories: LeadCategory[];
+  selectedLeadCategoryIds: string[];
+  confirmed: boolean;
+}
+
+export interface LeadCategory {
+  id: string;
+  label: string;
+  description: string;
+  kind: "allocator" | "company" | "partner";
+}
+
+export type ProspectFit = "strong" | "possible";
+export type ProspectStatus =
+  | "recommended"
+  | "passed"
+  | "ready_for_outreach"
+  | "sending"
+  | "sent"
+  | "failed";
+
+export interface ProspectEvidence {
+  label: string;
+  url: string;
+  snippet: string;
+}
+
+export type AllocatorType =
+  | "liquid_token_fund"
+  | "crypto_hedge_fund"
+  | "market_maker"
+  | "crypto_family_office"
+  | "venture_liquid_hybrid";
+
+export type AllocatorMandate = "liquid" | "hybrid" | "venture_only" | "unknown";
+export type AllocatorSourceKind =
+  | "sec_adv"
+  | "official_site"
+  | "official_publication"
+  | "governance"
+  | "conference"
+  | "hiring"
+  | "deal"
+  | "defillama"
+  | "dune"
+  | "explorer"
+  | "licensed";
+
+export interface AllocatorEvidence {
+  id: string;
+  sourceKind: AllocatorSourceKind;
+  sourceName: string;
+  url: string;
+  title: string;
+  excerpt: string;
+  observedAt: string;
+  publishedAt: string | null;
+  license: "public" | "licensed";
+}
+
+export interface AllocatorPerson {
+  id: string;
+  name: string;
+  role: string;
+  linkedinUrl: string | null;
+  xUrl: string | null;
+  publicEmail: string | null;
+  emailSourceUrl: string | null;
+  evidenceIds: string[];
+}
+
+export interface AllocatorFund {
+  id: string;
+  name: string;
+  mandate: AllocatorMandate;
+  strategies: string[];
+  chains: string[];
+  assets: string[];
+  geographies: string[];
+  allocationMinUsd: number | null;
+  allocationMaxUsd: number | null;
+  evidenceIds: string[];
+}
+
+export interface AllocatorOrganization {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  normalizedDomain: string;
+  allocatorType: AllocatorType;
+  headquarters: string | null;
+  funds: AllocatorFund[];
+  people: AllocatorPerson[];
+  evidence: AllocatorEvidence[];
+  activitySignals: { label: string; occurredAt: string; evidenceId: string }[];
+  sourceRecordIds: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  lastEnrichedAt: string;
+}
+
+export interface AllocatorGraph {
+  version: 1;
+  organizations: AllocatorOrganization[];
+  updatedAt: string;
+  ingestionRuns: {
+    id: string;
+    startedAt: string;
+    completedAt: string;
+    connectors: string[];
+    recordsSeen: number;
+    organizationsUpserted: number;
+    errors: string[];
+  }[];
+}
+
+export interface AllocatorMatch {
+  organizationId: string;
+  allocatorType: AllocatorType;
+  mandate: AllocatorMandate;
+  strategyMatch: string;
+  trigger: string | null;
+  fitScore: number;
+  freshness: "fresh" | "aging" | "stale";
+  lastVerifiedAt: string;
+}
+
+export interface IndexProspect {
+  id: string;
+  name: string;
+  role: string;
+  company: string;
+  location: string;
+  linkedinUrl: string | null;
+  xUrl: string | null;
+  email: string | null;
+  emailSourceUrl: string | null;
+  fit: ProspectFit;
+  fitScore: number;
+  whyFit: string;
+  whyNow: string | null;
+  valueForThem: string;
+  evidence: ProspectEvidence[];
+  outreachSubject: string;
+  outreachMessage: string;
+  status: ProspectStatus;
+  providerMessageId?: string;
+  deliveryError?: string;
+  updatedAt: string;
+  allocatorMatch?: AllocatorMatch;
+}
+
+export interface IndexWorkspace {
+  accessToken: string;
+  onboardingId: string;
+  domain: string;
+  ownerEmail: string;
+  icp: IndexIcp;
+  prospects: IndexProspect[];
+  allocatorProspects: IndexProspect[];
+  lastDiscoveryAt: string | null;
+  lastAllocatorFeedAt: string | null;
+  updatedAt: string;
+}

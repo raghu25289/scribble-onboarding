@@ -53,6 +53,71 @@ The app **degrades gracefully** if a step fails (site unreachable, no pricing pa
 search error, missing key): failures surface as honest status/error events and the flow
 continues where it can.
 
+## Index leads
+
+Every completed audit also creates a separate, private Index access link. Index uses the
+audit to pre-fill an ICP, searches the public web for matching LinkedIn and X profiles,
+qualifies candidates against sourced fit signals, and looks for public professional
+email addresses. The owner can edit each proposed message before approving it.
+
+Email delivery uses Resend's REST API. Set `RESEND_API_KEY` and
+`OUTREACH_FROM_EMAIL` (on a verified sending domain) to enable **Approve & send**.
+Without both values, approved messages stay in a ready state and are never represented
+as sent. The public report token does not grant access to the Index workspace.
+
+### ICP selection and allocator leads
+
+Index proposes broad lead categories from the stored product/category/question context,
+but does not generate opportunities until the owner selects at least one category. Crypto
+products get allocator-aware options such as liquid funds, market makers, liquid-strategy
+VCs, and institutional/family-office allocators. Matching never treats anonymous retail
+consumers as usable opportunities.
+
+The allocator pipeline is a separate, persistent candidate graph. Enable it with
+`ALLOCATOR_PIPELINE_ENABLED=true`; `/api/cron/allocators` runs weekly on Vercel and is
+protected by `CRON_SECRET`. Source adapters consume customer-controlled ETL feeds for:
+
+- public/official sources first: SEC Form ADV/IAPD and official fund sites;
+- public crypto/on-chain enrichment: DefiLlama, Dune, explorers, and labeled wallets;
+- optional licensed feeds: Crunchbase, PitchBook, RootData, Nansen, and Arkham, each
+  gated by both a feed URL and its credential.
+
+Adapters must emit source URLs, observation dates, and `public`/`licensed` provenance.
+The graph normalizes and deduplicates organizations by domain, keeps fund mandates,
+people and public contact routes, tracks freshness, and re-matches saved workspaces.
+The owner-triggered feed performs a final source reachability check before adding leads.
+No connector or scheduled job sends outreach; existing per-message approval remains the
+only send path.
+
+`data/allocator-fixtures.sample.json` is intentionally fictional, labeled demo data and
+is never loaded automatically.
+
+### Question intent and depth
+
+New audits explicitly choose Buying, Brand, or Both and Basic, Intermediate, Advanced,
+or Balanced mix. Both + Balanced is the default. Optional custom questions are preserved
+verbatim alongside generated questions. The selected settings and per-question intent,
+depth, and source are stored with the onboarding record and are used by generation—not
+just displayed in the UI.
+
+All schema evolution is additive. Older JSON/Redis records remain readable; missing
+workspace fields are filled in memory with safe defaults, no destructive backfill runs,
+and the allocator graph uses its own versioned key/file. Rollback is setting
+`ALLOCATOR_PIPELINE_ENABLED=false`; existing opportunity and audit data remains intact.
+
+#### Fast local demo (fictional data)
+
+1. Set `ALLOCATOR_PIPELINE_ENABLED=true`, `ALLOCATOR_DEMO_MODE=true`, and a local
+   `CRON_SECRET` in `.env.local`.
+2. Start the app, then ingest the fixture once:
+   `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/allocators`.
+3. Complete an audit for a DeFi-style product, open its private Index link, select
+   **Liquid funds / crypto hedge funds**, save the ICP, and click **Get this week's
+   allocator leads**.
+
+The fixture is fictional, uses `.example.invalid`, and is marked **FICTIONAL DEMO DATA**
+on every surfaced card. Disable `ALLOCATOR_DEMO_MODE` before connecting real feeds.
+
 ---
 
 ## Where to iterate
